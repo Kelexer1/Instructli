@@ -13,12 +13,13 @@ create table if not exists modules (
 
 insert into modules (id, title, description, icon_key, icon_bg, bar_color, order_index, locked, hidden)
 values
-  ('binary-arithmetic', 'Binary arithmetic', 'Addition, overflow, two''s complement', 'binary', '#E6F1FB', '#195FA5', 0, false, false),
-  ('single-cycle', 'Single cycle', 'Datapath, control signals', 'cpu', '#E9F2DD', '#3F681B', 1, false, false),
-  ('pipeline', '5-stage pipeline', 'IF, ID, EX, MEM, WB', 'rows', '#EDECFD', '#4F4898', 2, false, false),
-  ('machine-instructions', 'Machine instructions', 'Instruction types, opcodes', 'monitor-cog', '#fef9e0', '#f9ab00', 3, true, false),
-  ('hazards', 'Hazards and detection', 'Data, control, structural', 'alert-triangle', '#FAEEDC', '#b6761d', 4, true, false),
-  ('caching', 'Caching', 'Direct-mapped, set associative', 'database', '#FBECE6', '#b15636', 5, true, true)
+  ('sandbox', 'Sandbox', 'Experiment with RISC-V, CPU states, Caching, and Profiling', 'binary', '#FAEEDC', '#195FA5', 0, false, false),
+  ('binary-arithmetic', 'Binary arithmetic', 'Addition, overflow, two''s complement', 'binary', '#E6F1FB', '#195FA5', 1, false, false),
+  ('single-cycle', 'Single cycle', 'Datapath, control signals', 'cpu', '#E9F2DD', '#3F681B', 2, false, false),
+  ('pipeline', '5-stage pipeline', 'IF, ID, EX, MEM, WB', 'rows', '#EDECFD', '#4F4898', 3, false, false),
+  ('machine-instructions', 'Machine instructions', 'Instruction types, opcodes', 'monitor-cog', '#fef9e0', '#f9ab00', 4, true, false),
+  ('hazards', 'Hazards and detection', 'Data, control, structural', 'alert-triangle', '#FAEEDC', '#b6761d', 5, true, false),
+  ('caching', 'Caching', 'Direct-mapped, set associative', 'database', '#FBECE6', '#b15636', 6, true, true)
 on conflict (id) do nothing;
 
 create table if not exists analytics_events (

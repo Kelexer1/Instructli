@@ -9,6 +9,13 @@ import type { ModuleRow } from './api/modules/route';
 import { ShieldCheck } from 'lucide-react';
 
 const MODULE_META: Record<string, { href: string; sections: string[]; simulations: number; exercises: number; duration: string }> = {
+  'sandbox': {
+    href: '/modules/sandbox',
+    sections: [],
+    simulations: 0,
+    exercises: 0,
+    duration: ''
+  },
   'binary-arithmetic': {
     href: '/modules/binary-arithmetic',
     sections: ['Interpreting Numbers', 'Representation Formats', 'Arithmetic', 'Overflow'],
