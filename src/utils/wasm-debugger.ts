@@ -9,11 +9,12 @@ type WasmModule = {
 type WasmFactory = (options?: Record<string, unknown>) => Promise<WasmModule>;
 
 let modulePromise: Promise<WasmModule> | undefined;
+let wasmModule: WasmModule | undefined;
 let activeSession = 0;
 let outputBuffer: WasmOutput[] = [];
 
 export interface WasmOutput {
-  stream: 'stdout' | 'stderr';
+  stream: 'stdin' | 'stdout' | 'stderr';
   text: string;
 }
 
@@ -35,14 +36,18 @@ export interface WasmRegister {
 function loadModule(): Promise<WasmModule> {
   if (modulePromise) return modulePromise;
 
-  modulePromise = import(/* webpackIgnore: true */ '/wasm/riscv.js')
-    .then((module: { default?: WasmFactory; createRiscv?: WasmFactory }) => {
+  const version = Date.now().toString(36);
+  modulePromise = import(/* webpackIgnore: true */ `/wasm/riscv.js?v=${version}`)
+    .then(async (module: { default?: WasmFactory; createRiscv?: WasmFactory }) => {
       const factory = module.default ?? module.createRiscv;
       if (!factory) throw new Error('The RISC-V WASM factory was not found.');
-      return factory({
-        print: (text: string) => outputBuffer.push({ stream: 'stdout', text }),
+      const wasm = await factory({
+        locateFile: (path: string) =>
+          path.endsWith('.wasm') ? `/wasm/riscv.wasm?v=${version}` : path,
         printErr: (text: string) => outputBuffer.push({ stream: 'stderr', text }),
       });
+      wasmModule = wasm;
+      return wasm;
     })
     .catch((error) => {
       modulePromise = undefined;
@@ -59,7 +64,25 @@ function loadModule(): Promise<WasmModule> {
 export function drainWasmOutput(): WasmOutput[] {
   const output = outputBuffer;
   outputBuffer = [];
+  if (wasmModule) {
+    const pointer = wasmModule.ccall('wasm_output_take', 'number', [], []);
+    if (pointer) {
+      const text = wasmModule.UTF8ToString(pointer);
+      wasmModule._free(pointer);
+      if (text) output.push({ stream: 'stdout', text });
+    }
+  }
   return output;
+}
+
+export async function provideWasmInput(input: string): Promise<void> {
+  const wasm = await loadModule();
+  wasm.ccall('wasm_input_feed', null, ['string'], [`${input}\n`]);
+}
+
+export async function resetWasmInput(): Promise<void> {
+  const wasm = await loadModule();
+  wasm.ccall('wasm_input_reset', null, [], []);
 }
 
 function closeActiveSession(wasm: WasmModule) {
@@ -119,6 +142,12 @@ export async function readWasmDebugState(): Promise<WasmDebugState> {
   return { instructions, currentAddress };
 }
 
+export async function readWasmProgramCounter(): Promise<number> {
+  const wasm = await loadModule();
+  if (!activeSession) throw new Error('Load the program before reading execution state.');
+  return wasm.ccall('wasm_pc', 'number', ['number'], [activeSession]);
+}
+
 export async function readWasmLastExecutedAddress(): Promise<number> {
   const wasm = await loadModule();
   if (!activeSession) throw new Error('Load the program before reading execution state.');
@@ -133,6 +162,21 @@ export async function readWasmRegisters(): Promise<WasmRegister[]> {
     number,
     value: wasm.ccall('wasm_reg', 'number', ['number', 'number'], [activeSession, number]) >>> 0,
   }));
+}
+
+export async function writeWasmRegister(number: number, value: number): Promise<void> {
+  const wasm = await loadModule();
+  if (!activeSession) throw new Error('Load the program before editing registers.');
+  if (!Number.isInteger(number) || number < 1 || number >= 32) {
+    throw new Error('Only registers x1 through x31 can be edited.');
+  }
+
+  const written = wasm.ccall('wasm_set_reg', 'number', ['number', 'number', 'number'], [
+    activeSession,
+    number,
+    value >>> 0,
+  ]);
+  if (!written) throw new Error(`Register x${number} could not be updated.`);
 }
 
 /**

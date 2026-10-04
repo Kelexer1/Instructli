@@ -15,7 +15,11 @@ import {
   loadWasm,
   readWasmDebugState,
   readWasmLastExecutedAddress,
+  readWasmProgramCounter,
   readWasmRegisters,
+  writeWasmRegister,
+  provideWasmInput,
+  resetWasmInput,
   runWasm,
   stepWasm,
   type WasmRegister,
@@ -37,6 +41,7 @@ export default function SandboxModule() {
   const [registers, setRegisters] = useState<WasmRegister[]>(
     () => Array.from({ length: 32 }, (_, number) => ({ number, value: 0 })),
   );
+  const [changedRegisters, setChangedRegisters] = useState<ReadonlySet<number>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -50,6 +55,7 @@ export default function SandboxModule() {
     setInstructions([]);
     setJustExecutedAddress(null);
     setNextAddress(null);
+    setChangedRegisters(new Set());
     setStatus(null);
   }
 
@@ -61,12 +67,15 @@ export default function SandboxModule() {
   async function handleAssemble() {
     setBusy(true);
     setStatus(null);
+    setTerminalOutput([]);
     try {
       await assembleWasm(source);
+      await resetWasmInput();
       const debugState = await readWasmDebugState();
       const nextRegisters = await readWasmRegisters();
       setInstructions(debugState.instructions);
       setRegisters(nextRegisters);
+      setChangedRegisters(new Set());
       setJustExecutedAddress(null);
       setNextAddress(debugState.currentAddress);
       setAssemblyState('current');
@@ -84,12 +93,15 @@ export default function SandboxModule() {
   async function handleLoad() {
     setBusy(true);
     setStatus(null);
+    setTerminalOutput([]);
     try {
       await loadWasm();
+      await resetWasmInput();
       const debugState = await readWasmDebugState();
       const nextRegisters = await readWasmRegisters();
       setInstructions(debugState.instructions);
       setRegisters(nextRegisters);
+      setChangedRegisters(new Set());
       setJustExecutedAddress(null);
       setNextAddress(debugState.currentAddress);
       setLoaded(true);
@@ -100,6 +112,16 @@ export default function SandboxModule() {
       flushTerminalOutput();
       setBusy(false);
     }
+
+  }
+
+  async function handleTerminalInput(input: string) {
+    try {
+      await provideWasmInput(input);
+      setTerminalOutput((current) => [...current, { stream: 'stdin', text: `${input}\n` }]);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Input could not be sent to the emulator.');
+    }
   }
 
   async function handleExecution(action: () => Promise<number>) {
@@ -107,18 +129,35 @@ export default function SandboxModule() {
     setStatus(null);
     try {
       await action();
-      const debugState = await readWasmDebugState();
+      flushTerminalOutput();
       const executedAddress = await readWasmLastExecutedAddress();
+      const currentAddress = await readWasmProgramCounter();
       const nextRegisters = await readWasmRegisters();
+      setChangedRegisters(new Set(
+        nextRegisters
+          .filter((register, index) => register.value !== registers[index]?.value)
+          .map((register) => register.number),
+      ));
       setRegisters(nextRegisters);
       setJustExecutedAddress(executedAddress);
-      setNextAddress(debugState.currentAddress);
+      setNextAddress(currentAddress);
       setStatus('Execution stopped.');
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'The emulator could not execute the program.');
     } finally {
-      flushTerminalOutput();
       setBusy(false);
+    }
+  }
+
+  async function handleRegisterChange(registerNumber: number, value: number) {
+    try {
+      await writeWasmRegister(registerNumber, value);
+      const nextRegisters = await readWasmRegisters();
+      setRegisters(nextRegisters);
+      setChangedRegisters(new Set());
+      setStatus(`Updated x${registerNumber}.`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'The register could not be updated.');
     }
   }
 
@@ -184,7 +223,11 @@ export default function SandboxModule() {
           {/* Editor Pane */}
           <div className='flex h-full w-[60%] min-w-0 flex-row'>
             <div className="flex w-[20%] min-w-0 shrink-0">
-              <RegisterPane registers={registers} />
+              <RegisterPane
+                registers={registers}
+                changedRegisters={changedRegisters}
+                onChange={handleRegisterChange}
+              />
             </div>
             <WindowTabs
               className="min-h-0 min-w-0 flex-1"
@@ -223,7 +266,7 @@ export default function SandboxModule() {
                 {
                   id: 'terminal',
                   label: 'Terminal',
-                  content: <TerminalPane output={terminalOutput} />,
+                  content: <TerminalPane output={terminalOutput} onInput={handleTerminalInput} disabled={busy || !loaded} />,
                 },
               ]}
             />
