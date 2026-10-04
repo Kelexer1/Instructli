@@ -62,7 +62,7 @@ export function WindowTabs({
   return (
     <div className={`flex min-h-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm ${className}`}>
       <div
-        className="flex shrink-0 items-end gap-1 overflow-x-auto border-b border-slate-200 bg-slate-50 px-2 pt-2"
+        className="flex shrink-0 items-end gap-1 overflow-x-auto overflow-y-hidden border-b border-slate-200 bg-slate-50 px-2 pt-2"
         role="tablist"
         aria-label={ariaLabel}
       >

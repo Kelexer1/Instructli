@@ -5,7 +5,23 @@ import Link from 'next/link';
 import { ChevronLeft, File, FileDown, FileUp, Play, RotateCcw, StepForward } from 'lucide-react';
 import { recordAnalyticsVisit } from '@/src/utils/analytics';
 import CodeEditor from '@/components/sandbox/CodeEditor';
-import { assembleWasm, loadWasm, runWasm, stepWasm } from '@/src/utils/wasm-debugger';
+import DisassemblyPane from '@/components/sandbox/DisassemblyPane';
+import RegisterPane from '@/components/sandbox/RegisterPane';
+import TerminalPane from '@/components/sandbox/TerminalPane';
+import { WindowTabs } from '@/components/WindowTabs';
+import {
+  assembleWasm,
+  drainWasmOutput,
+  loadWasm,
+  readWasmDebugState,
+  readWasmLastExecutedAddress,
+  readWasmRegisters,
+  runWasm,
+  stepWasm,
+  type WasmRegister,
+  type WasmOutput,
+  type DisassemblyInstruction,
+} from '@/src/utils/wasm-debugger';
 
 export default function SandboxModule() {
   const [source, setSource] = useState('# Write a RISC-V program\n');
@@ -14,6 +30,13 @@ export default function SandboxModule() {
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [instructions, setInstructions] = useState<DisassemblyInstruction[]>([]);
+  const [justExecutedAddress, setJustExecutedAddress] = useState<number | null>(null);
+  const [nextAddress, setNextAddress] = useState<number | null>(null);
+  const [terminalOutput, setTerminalOutput] = useState<WasmOutput[]>([]);
+  const [registers, setRegisters] = useState<WasmRegister[]>(
+    () => Array.from({ length: 32 }, (_, number) => ({ number, value: 0 })),
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -24,7 +47,15 @@ export default function SandboxModule() {
     setSource(nextSource);
     setAssemblyState((current) => (current === 'none' ? 'none' : 'outdated'));
     setLoaded(false);
+    setInstructions([]);
+    setJustExecutedAddress(null);
+    setNextAddress(null);
     setStatus(null);
+  }
+
+  function flushTerminalOutput() {
+    const output = drainWasmOutput();
+    if (output.length > 0) setTerminalOutput((current) => [...current, ...output]);
   }
 
   async function handleAssemble() {
@@ -32,6 +63,12 @@ export default function SandboxModule() {
     setStatus(null);
     try {
       await assembleWasm(source);
+      const debugState = await readWasmDebugState();
+      const nextRegisters = await readWasmRegisters();
+      setInstructions(debugState.instructions);
+      setRegisters(nextRegisters);
+      setJustExecutedAddress(null);
+      setNextAddress(debugState.currentAddress);
       setAssemblyState('current');
       setLoaded(false);
       setStatus('Assembly is up to date.');
@@ -39,6 +76,7 @@ export default function SandboxModule() {
       setAssemblyState('outdated');
       setStatus(error instanceof Error ? error.message : 'Assembly failed.');
     } finally {
+      flushTerminalOutput();
       setBusy(false);
     }
   }
@@ -48,11 +86,18 @@ export default function SandboxModule() {
     setStatus(null);
     try {
       await loadWasm();
+      const debugState = await readWasmDebugState();
+      const nextRegisters = await readWasmRegisters();
+      setInstructions(debugState.instructions);
+      setRegisters(nextRegisters);
+      setJustExecutedAddress(null);
+      setNextAddress(debugState.currentAddress);
       setLoaded(true);
       setStatus('Program loaded. Ready to run.');
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'The program could not be loaded.');
     } finally {
+      flushTerminalOutput();
       setBusy(false);
     }
   }
@@ -62,10 +107,17 @@ export default function SandboxModule() {
     setStatus(null);
     try {
       await action();
+      const debugState = await readWasmDebugState();
+      const executedAddress = await readWasmLastExecutedAddress();
+      const nextRegisters = await readWasmRegisters();
+      setRegisters(nextRegisters);
+      setJustExecutedAddress(executedAddress);
+      setNextAddress(debugState.currentAddress);
       setStatus('Execution stopped.');
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'The emulator could not execute the program.');
     } finally {
+      flushTerminalOutput();
       setBusy(false);
     }
   }
@@ -131,16 +183,50 @@ export default function SandboxModule() {
         <div className='flex min-h-0 h-full flex-1 flex-row'>
           {/* Editor Pane */}
           <div className='flex h-full w-[60%] min-w-0 flex-row'>
-            {/* Register File */}
-            <div className='w-[20%] shrink-0 rounded-l-xl border border-r-0 border-slate-200 bg-slate-50'>
+            <div className="flex w-[20%] min-w-0 shrink-0">
+              <RegisterPane registers={registers} />
             </div>
-            {/* Code Input */}
-            <CodeEditor value={source} onChange={updateSource} />
+            <WindowTabs
+              className="min-h-0 min-w-0 flex-1"
+              panelClassName="flex min-h-0 p-0"
+              ariaLabel="Editor windows"
+              tabs={[
+                {
+                  id: 'text-editor',
+                  label: 'Text editor',
+                  content: <CodeEditor value={source} onChange={updateSource} />,
+                },
+                {
+                  id: 'disassembly',
+                  label: 'Disassembly',
+                  content: (
+                    <DisassemblyPane
+                      instructions={instructions}
+                      justExecutedAddress={justExecutedAddress}
+                      nextAddress={nextAddress}
+                      onGoToJustExecuted={() => setStatus('Showing the instruction that just executed.')}
+                      onGoToNext={() => setStatus('Showing the next instruction to execute.')}
+                    />
+                  ),
+                },
+              ]}
+            />
           </div>
 
           {/* Tool Pane */}
-          <div className='ml-6 flex h-full min-h-0 w-[40%]'>
-
+          <div className="ml-6 flex h-full min-h-0 w-[40%]">
+            <WindowTabs
+              className="min-h-0 min-w-0 flex-1"
+              panelClassName="flex min-h-0 p-0"
+              ariaLabel="Tool windows"
+              tabs={[
+                {
+                  id: 'terminal',
+                  label: 'Terminal',
+                  content: <TerminalPane output={terminalOutput} />,
+                },
+              ]}
+            />
           </div>
         </div>
       </div>
