@@ -21,6 +21,8 @@ export interface WasmOutput {
 export interface DisassemblyInstruction {
   address: number;
   text: string;
+  sourceLine: number | null;
+  sourceText: string | null;
 }
 
 export interface WasmDebugState {
@@ -32,6 +34,8 @@ export interface WasmRegister {
   number: number;
   value: number;
 }
+
+export const WASM_STOP_EXITED = 3;
 
 function loadModule(): Promise<WasmModule> {
   if (modulePromise) return modulePromise;
@@ -126,13 +130,14 @@ export async function stepWasm(): Promise<number> {
   return wasm.ccall('wasm_step', 'number', ['number'], [activeSession]);
 }
 
-export async function readWasmDebugState(): Promise<WasmDebugState> {
+export async function readWasmDebugState(source = ''): Promise<WasmDebugState> {
   const wasm = await loadModule();
   if (!activeSession) throw new Error('Assemble the program before viewing disassembly.');
 
   const textBase = wasm.ccall('wasm_text_base', 'number', ['number'], [activeSession]);
   const textSize = wasm.ccall('wasm_text_size', 'number', ['number'], [activeSession]);
   const currentAddress = wasm.ccall('wasm_pc', 'number', ['number'], [activeSession]);
+  const sourceLines = source.split('\n');
   const instructions: DisassemblyInstruction[] = [];
 
   for (let address = textBase; address < textBase + textSize; address += 4) {
@@ -140,13 +145,31 @@ export async function readWasmDebugState(): Promise<WasmDebugState> {
     if (!pointer) continue;
 
     try {
-      instructions.push({ address, text: wasm.UTF8ToString(pointer) });
+      const sourceLine = wasm.ccall('wasm_line_for_addr', 'number', ['number', 'number', 'number'], [
+        activeSession,
+        address,
+        textBase,
+      ]);
+      instructions.push({
+        address,
+        text: wasm.UTF8ToString(pointer),
+        sourceLine: sourceLine || null,
+        sourceText: sourceLine ? sourceLines[sourceLine - 1]?.trim() || null : null,
+      });
     } finally {
       wasm._free(pointer);
     }
+
   }
 
   return { instructions, currentAddress };
+}
+
+export async function readWasmAddressForLine(line: number): Promise<number | null> {
+  const debugState = await readWasmDebugState();
+  return debugState.instructions.find(
+    (instruction) => instruction.sourceLine !== null && instruction.sourceLine >= line,
+  )?.address ?? null;
 }
 
 export async function readWasmProgramCounter(): Promise<number> {
@@ -159,6 +182,12 @@ export async function readWasmLastExecutedAddress(): Promise<number> {
   const wasm = await loadModule();
   if (!activeSession) throw new Error('Load the program before reading execution state.');
   return wasm.ccall('wasm_last_pc_old', 'number', ['number'], [activeSession]);
+}
+
+export async function readWasmExitCode(): Promise<number> {
+  const wasm = await loadModule();
+  if (!activeSession) throw new Error('Load the program before reading execution state.');
+  return wasm.ccall('wasm_exit_code', 'number', ['number'], [activeSession]);
 }
 
 export async function readWasmRegisters(): Promise<WasmRegister[]> {
@@ -186,31 +215,15 @@ export async function writeWasmRegister(number: number, value: number): Promise<
   if (!written) throw new Error(`Register x${number} could not be updated.`);
 }
 
-/**
- * Recreates the debugger session from source and reapplies all active line
- * breakpoints. The native API currently exposes adding line breakpoints but
- * not removing them by line, so rebuilding keeps the native state exact.
- */
-export async function syncWasmBreakpoints(source: string, lines: number[]): Promise<void> {
+export async function addWasmBreakpoint(address: number): Promise<void> {
   const wasm = await loadModule();
-  closeActiveSession(wasm);
+  if (!activeSession) throw new Error('Assemble the program before setting breakpoints.');
+  const added = wasm.ccall('wasm_bp_add', 'number', ['number', 'number'], [activeSession, address]);
+  if (!added) throw new Error(`The emulator could not set a breakpoint at 0x${address.toString(16)}.`);
+}
 
-  const session = wasm.ccall('wasm_session_open', 'number', ['string'], [source]);
-  if (!session) throw new Error('The source could not be assembled by the emulator.');
-
-  try {
-    const textBase = wasm.ccall('wasm_text_base', 'number', ['number'], [session]);
-    for (const line of lines) {
-      const added = wasm.ccall('wasm_bp_add_line', 'number', ['number', 'number', 'number'], [
-        session,
-        line,
-        textBase,
-      ]);
-      if (!added) throw new Error(`The emulator could not set a breakpoint on line ${line}.`);
-    }
-    activeSession = session;
-  } catch (error) {
-    wasm.ccall('wasm_session_close', null, ['number'], [session]);
-    throw error;
-  }
+export async function removeWasmBreakpoint(address: number): Promise<void> {
+  const wasm = await loadModule();
+  if (!activeSession) throw new Error('Assemble the program before removing breakpoints.');
+  wasm.ccall('wasm_bp_remove', null, ['number', 'number'], [activeSession, address]);
 }

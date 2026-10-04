@@ -14,7 +14,11 @@ import {
   drainWasmOutput,
   loadWasm,
   readWasmDebugState,
+  readWasmAddressForLine,
+  addWasmBreakpoint,
+  removeWasmBreakpoint,
   readWasmLastExecutedAddress,
+  readWasmExitCode,
   readWasmProgramCounter,
   readWasmRegisters,
   writeWasmRegister,
@@ -23,6 +27,7 @@ import {
   resetWasmInput,
   runWasm,
   stepWasm,
+  WASM_STOP_EXITED,
   type WasmRegister,
   type WasmOutput,
   type DisassemblyInstruction,
@@ -38,6 +43,7 @@ export default function SandboxModule() {
   const [instructions, setInstructions] = useState<DisassemblyInstruction[]>([]);
   const [justExecutedAddress, setJustExecutedAddress] = useState<number | null>(null);
   const [nextAddress, setNextAddress] = useState<number | null>(null);
+  const [breakpointAddresses, setBreakpointAddresses] = useState<ReadonlySet<number>>(new Set());
   const [terminalOutput, setTerminalOutput] = useState<WasmOutput[]>([]);
   const [registers, setRegisters] = useState<WasmRegister[]>(
     () => Array.from({ length: 32 }, (_, number) => ({ number, value: 0 })),
@@ -72,13 +78,14 @@ export default function SandboxModule() {
     try {
       await assembleWasm(source);
       await resetWasmInput();
-      const debugState = await readWasmDebugState();
+      const debugState = await readWasmDebugState(source);
       const nextRegisters = await readWasmRegisters();
       setInstructions(debugState.instructions);
       setRegisters(nextRegisters);
       setChangedRegisters(new Set());
       setJustExecutedAddress(null);
       setNextAddress(debugState.currentAddress);
+      setBreakpointAddresses(new Set());
       setAssemblyState('current');
       setLoaded(false);
       setStatus('Assembly is up to date.');
@@ -98,7 +105,7 @@ export default function SandboxModule() {
     try {
       await loadWasm();
       await resetWasmInput();
-      const debugState = await readWasmDebugState();
+      const debugState = await readWasmDebugState(source);
       const nextRegisters = await readWasmRegisters();
       setInstructions(debugState.instructions);
       setRegisters(nextRegisters);
@@ -114,6 +121,27 @@ export default function SandboxModule() {
       setBusy(false);
     }
 
+  }
+
+  async function toggleBreakpointAddress(address: number) {
+    const next = new Set(breakpointAddresses);
+    if (next.has(address)) {
+      await removeWasmBreakpoint(address);
+      next.delete(address);
+    } else {
+      await addWasmBreakpoint(address);
+      next.add(address);
+    }
+    setBreakpointAddresses(next);
+  }
+
+  async function toggleBreakpointLine(line: number) {
+    const address = await readWasmAddressForLine(line);
+    if (address === null) {
+      setStatus(`No executable instruction was found on or after line ${line}.`);
+      return;
+    }
+    await toggleBreakpointAddress(address);
   }
 
   async function handleTerminalInput(input: string) {
@@ -133,7 +161,7 @@ export default function SandboxModule() {
     setBusy(true);
     setStatus(null);
     try {
-      await action();
+      const stopReason = await action();
       flushTerminalOutput();
       const executedAddress = await readWasmLastExecutedAddress();
       const currentAddress = await readWasmProgramCounter();
@@ -146,7 +174,12 @@ export default function SandboxModule() {
       setRegisters(nextRegisters);
       setJustExecutedAddress(executedAddress);
       setNextAddress(currentAddress);
-      setStatus('Execution stopped.');
+      if (stopReason === WASM_STOP_EXITED) {
+        const exitCode = await readWasmExitCode();
+        setStatus(`Program exited with code ${exitCode}.`);
+      } else {
+        setStatus('Execution stopped.');
+      }
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'The emulator could not execute the program.');
     } finally {
@@ -242,7 +275,25 @@ export default function SandboxModule() {
                 {
                   id: 'text-editor',
                   label: 'Text editor',
-                  content: <CodeEditor value={source} onChange={updateSource} />,
+                  content: (
+                    <CodeEditor
+                      value={source}
+                      onChange={updateSource}
+                      breakpointLines={new Set(
+                        instructions
+                          .filter(
+                            (instruction): instruction is DisassemblyInstruction & { sourceLine: number } =>
+                              breakpointAddresses.has(instruction.address) && instruction.sourceLine !== null,
+                          )
+                          .map((instruction) => instruction.sourceLine),
+                      )}
+                      onToggleBreakpoint={(line) => {
+                        void toggleBreakpointLine(line).catch((error) =>
+                          setStatus(error instanceof Error ? error.message : 'The breakpoint could not be updated.'),
+                        );
+                      }}
+                    />
+                  ),
                 },
                 {
                   id: 'disassembly',
@@ -254,6 +305,12 @@ export default function SandboxModule() {
                       nextAddress={nextAddress}
                       onGoToJustExecuted={() => setStatus('Showing the instruction that just executed.')}
                       onGoToNext={() => setStatus('Showing the next instruction to execute.')}
+                      breakpoints={breakpointAddresses}
+                      onToggleBreakpoint={(address) => {
+                        void toggleBreakpointAddress(address).catch((error) =>
+                          setStatus(error instanceof Error ? error.message : 'The breakpoint could not be updated.'),
+                        );
+                      }}
                     />
                   ),
                 },

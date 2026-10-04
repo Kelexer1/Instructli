@@ -1,7 +1,6 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
-import { syncWasmBreakpoints } from '@/src/utils/wasm-debugger';
 
 const INDENT = '  ';
 
@@ -9,20 +8,25 @@ interface CodeEditorProps {
   initialValue?: string;
   value?: string;
   onChange?: (value: string) => void;
+  breakpointLines: ReadonlySet<number>;
+  onToggleBreakpoint: (line: number) => void;
 }
 
-export default function CodeEditor({ initialValue = '', value: controlledValue, onChange }: CodeEditorProps) {
+export default function CodeEditor({
+  initialValue = '',
+  value: controlledValue,
+  onChange,
+  breakpointLines,
+  onToggleBreakpoint,
+}: CodeEditorProps) {
   const [localValue, setLocalValue] = useState(initialValue);
   const value = controlledValue ?? localValue;
-  const [breakpoints, setBreakpoints] = useState<Set<number>>(() => new Set());
-  const [wasmError, setWasmError] = useState<string | null>(null);
   const lineNumbersRef = useRef<HTMLDivElement>(null);
   const lines = useMemo(() => value.split('\n'), [value]);
 
   function updateValue(nextValue: string) {
     if (controlledValue === undefined) setLocalValue(nextValue);
     onChange?.(nextValue);
-    setWasmError(null);
   }
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -47,19 +51,6 @@ export default function CodeEditor({ initialValue = '', value: controlledValue, 
     });
   }
 
-  async function toggleBreakpoint(line: number) {
-    const nextBreakpoints = new Set(breakpoints);
-    if (nextBreakpoints.has(line)) nextBreakpoints.delete(line);
-    else nextBreakpoints.add(line);
-    setBreakpoints(nextBreakpoints);
-
-    try {
-      await syncWasmBreakpoints(value, [...nextBreakpoints].sort((a, b) => a - b));
-    } catch (error) {
-      setWasmError(error instanceof Error ? error.message : 'The emulator could not be updated.');
-    }
-  }
-
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
       <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-4 py-2 text-xs text-gray-400">
@@ -79,14 +70,14 @@ export default function CodeEditor({ initialValue = '', value: controlledValue, 
               <button
                 key={line}
                 type="button"
-                aria-label={`${breakpoints.has(line) ? 'Remove' : 'Add'} breakpoint on line ${line}`}
-                aria-pressed={breakpoints.has(line)}
-                onClick={() => toggleBreakpoint(line)}
+                aria-label={`${breakpointLines.has(line) ? 'Remove' : 'Add'} breakpoint on line ${line}`}
+                aria-pressed={breakpointLines.has(line)}
+                onClick={() => onToggleBreakpoint(line)}
                 className={`flex h-6 w-full items-center justify-end gap-2 pr-3 transition-colors hover:bg-gray-100 ${
-                  breakpoints.has(line) ? 'text-red-500' : ''
+                  breakpointLines.has(line) ? 'text-red-500' : ''
                 }`}
               >
-                {breakpoints.has(line) && <span className="h-2.5 w-2.5 rounded-full bg-red-500" />}
+                {breakpointLines.has(line) && <span className="h-2.5 w-2.5 rounded-full bg-red-500" />}
                 {line}
               </button>
             );
@@ -108,11 +99,6 @@ export default function CodeEditor({ initialValue = '', value: controlledValue, 
         />
       </div>
 
-      {wasmError && (
-        <p role="status" className="border-t border-amber-100 bg-amber-50 px-4 py-2 text-xs text-amber-700">
-          Breakpoint preview updated locally. {wasmError}
-        </p>
-      )}
     </section>
   );
 }

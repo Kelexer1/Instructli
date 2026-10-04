@@ -9,6 +9,8 @@ interface DisassemblyPaneProps {
   nextAddress: number | null;
   onGoToJustExecuted: () => void;
   onGoToNext: () => void;
+  breakpoints: ReadonlySet<number>;
+  onToggleBreakpoint: (address: number) => void;
 }
 
 function formatAddress(address: number) {
@@ -21,6 +23,8 @@ export default function DisassemblyPane({
   nextAddress,
   onGoToJustExecuted,
   onGoToNext,
+  breakpoints,
+  onToggleBreakpoint,
 }: DisassemblyPaneProps) {
   const rowRefs = useRef(new Map<number, HTMLDivElement>());
 
@@ -85,7 +89,18 @@ export default function DisassemblyPane({
                 }`}
               >
                 <span className="w-20 shrink-0 text-right text-gray-400">{formatAddress(instruction.address)}</span>
-                <span className="truncate text-gray-800">{instruction.text}</span>
+                <button
+                  type="button"
+                  aria-label={`${breakpoints.has(instruction.address) ? 'Remove' : 'Add'} breakpoint at ${formatAddress(instruction.address)}`}
+                  aria-pressed={breakpoints.has(instruction.address)}
+                  onClick={() => onToggleBreakpoint(instruction.address)}
+                  className={`h-2.5 w-2.5 shrink-0 rounded-full ${breakpoints.has(instruction.address) ? 'bg-red-500' : 'bg-transparent hover:bg-red-200'}`}
+                />
+                <span className="min-w-0 flex-1 truncate text-gray-800">{instruction.text}</span>
+                <span className="flex w-[42%] min-w-0 items-center gap-2 truncate text-gray-400" title={instruction.sourceText ?? undefined}>
+                  <span aria-hidden="true" className="shrink-0 text-gray-500">#</span>
+                  <span className="truncate">{instruction.sourceText ?? 'original unavailable'}</span>
+                </span>
                 {isJustExecuted && <span className="ml-auto shrink-0 text-[10px] text-amber-700">executed</span>}
                 {isNext && <span className="ml-auto shrink-0 text-[10px] text-indigo-700">next</span>}
               </div>
