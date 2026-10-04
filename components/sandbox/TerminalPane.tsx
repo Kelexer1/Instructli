@@ -10,11 +10,17 @@ interface TerminalPaneProps {
 }
 
 export default function TerminalPane({ output, onInput, disabled = false }: TerminalPaneProps) {
+  const terminalLogRef = useRef<HTMLDivElement>(null);
   const terminalEndRef = useRef<HTMLDivElement>(null);
   const [input, setInput] = useState('');
 
   useEffect(() => {
-    terminalEndRef.current?.scrollIntoView({ block: 'nearest' });
+    const animationFrame = requestAnimationFrame(() => {
+      const log = terminalLogRef.current;
+      if (log) log.scrollTop = log.scrollHeight;
+      terminalEndRef.current?.scrollIntoView({ block: 'end' });
+    });
+    return () => cancelAnimationFrame(animationFrame);
   }, [output]);
 
   function submitInput(event: FormEvent<HTMLFormElement>) {
@@ -31,6 +37,7 @@ export default function TerminalPane({ output, onInput, disabled = false }: Term
         <span className="text-gray-400">emulator output</span>
       </div>
       <div
+        ref={terminalLogRef}
         role="log"
         aria-live="polite"
         className="min-h-0 flex-1 overflow-auto p-4 font-mono text-xs leading-5 text-gray-800"

@@ -80,6 +80,13 @@ export async function provideWasmInput(input: string): Promise<void> {
   wasm.ccall('wasm_input_feed', null, ['string'], [`${input}\n`]);
 }
 
+export async function resumeWasm(): Promise<void> {
+  const wasm = await loadModule();
+  if (!activeSession) throw new Error('Load the program before resuming it.');
+  const resumed = wasm.ccall('wasm_resume', 'number', ['number'], [activeSession]);
+  if (!resumed) throw new Error('The emulator could not be resumed.');
+}
+
 export async function resetWasmInput(): Promise<void> {
   const wasm = await loadModule();
   wasm.ccall('wasm_input_reset', null, [], []);

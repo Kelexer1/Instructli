@@ -19,6 +19,7 @@ import {
   readWasmRegisters,
   writeWasmRegister,
   provideWasmInput,
+  resumeWasm,
   resetWasmInput,
   runWasm,
   stepWasm,
@@ -116,11 +117,15 @@ export default function SandboxModule() {
   }
 
   async function handleTerminalInput(input: string) {
+    setBusy(true);
     try {
       await provideWasmInput(input);
       setTerminalOutput((current) => [...current, { stream: 'stdin', text: `${input}\n` }]);
+      await resumeWasm();
+      await handleExecution(runWasm);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Input could not be sent to the emulator.');
+      setBusy(false);
     }
   }
 
