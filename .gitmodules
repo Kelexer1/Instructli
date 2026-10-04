@@ -1,0 +1,3 @@
+[submodule "riscv-emulator-wasm"]
+	path = riscv-emulator-wasm
+	url = https://github.com/Kelexer1/riscv-emulator-wasm

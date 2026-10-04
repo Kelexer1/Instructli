@@ -1,0 +1,94 @@
+'use client';
+
+type WasmModule = {
+  ccall: (name: string, returnType: string | null, argTypes: string[], args: unknown[]) => number;
+};
+
+type WasmFactory = (options?: Record<string, unknown>) => Promise<WasmModule>;
+
+let modulePromise: Promise<WasmModule> | undefined;
+let activeSession = 0;
+
+function loadModule(): Promise<WasmModule> {
+  if (modulePromise) return modulePromise;
+
+  modulePromise = import(/* webpackIgnore: true */ '/wasm/riscv.js')
+    .then((module: { default?: WasmFactory; createRiscv?: WasmFactory }) => {
+      const factory = module.default ?? module.createRiscv;
+      if (!factory) throw new Error('The RISC-V WASM factory was not found.');
+      return factory();
+    })
+    .catch((error) => {
+      modulePromise = undefined;
+      throw new Error(
+        error instanceof Error
+          ? `The RISC-V WASM module could not be loaded: ${error.message}`
+          : 'The RISC-V WASM module could not be loaded.',
+      );
+    });
+
+  return modulePromise;
+}
+
+function closeActiveSession(wasm: WasmModule) {
+  if (!activeSession) return;
+  wasm.ccall('wasm_session_close', null, ['number'], [activeSession]);
+  activeSession = 0;
+}
+
+export async function assembleWasm(source: string): Promise<void> {
+  const wasm = await loadModule();
+  closeActiveSession(wasm);
+
+  const session = wasm.ccall('wasm_session_open', 'number', ['string'], [source]);
+  if (!session) throw new Error('The source could not be assembled.');
+  activeSession = session;
+}
+
+export async function loadWasm(): Promise<void> {
+  const wasm = await loadModule();
+  if (!activeSession) throw new Error('Assemble the program before loading it.');
+  const loaded = wasm.ccall('wasm_dbg_reset', 'number', ['number'], [activeSession]);
+  if (!loaded) throw new Error('The assembled program could not be loaded into the emulator.');
+}
+
+export async function runWasm(): Promise<number> {
+  const wasm = await loadModule();
+  if (!activeSession) throw new Error('Load the program before running it.');
+  return wasm.ccall('wasm_continue', 'number', ['number'], [activeSession]);
+}
+
+export async function stepWasm(): Promise<number> {
+  const wasm = await loadModule();
+  if (!activeSession) throw new Error('Load the program before stepping it.');
+  return wasm.ccall('wasm_step', 'number', ['number'], [activeSession]);
+}
+
+/**
+ * Recreates the debugger session from source and reapplies all active line
+ * breakpoints. The native API currently exposes adding line breakpoints but
+ * not removing them by line, so rebuilding keeps the native state exact.
+ */
+export async function syncWasmBreakpoints(source: string, lines: number[]): Promise<void> {
+  const wasm = await loadModule();
+  closeActiveSession(wasm);
+
+  const session = wasm.ccall('wasm_session_open', 'number', ['string'], [source]);
+  if (!session) throw new Error('The source could not be assembled by the emulator.');
+
+  try {
+    const textBase = wasm.ccall('wasm_text_base', 'number', ['number'], [session]);
+    for (const line of lines) {
+      const added = wasm.ccall('wasm_bp_add_line', 'number', ['number', 'number', 'number'], [
+        session,
+        line,
+        textBase,
+      ]);
+      if (!added) throw new Error(`The emulator could not set a breakpoint on line ${line}.`);
+    }
+    activeSession = session;
+  } catch (error) {
+    wasm.ccall('wasm_session_close', null, ['number'], [session]);
+    throw error;
+  }
+}

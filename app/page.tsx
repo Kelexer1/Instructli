@@ -14,7 +14,7 @@ const MODULE_META: Record<string, { href: string; sections: string[]; simulation
     sections: [],
     simulations: 0,
     exercises: 0,
-    duration: ''
+    duration: '-'
   },
   'binary-arithmetic': {
     href: '/modules/binary-arithmetic',

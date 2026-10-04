@@ -23,7 +23,7 @@ export default function RootLayout({
         />
         {/*<link href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex&display=swap" rel="stylesheet" />*/}
       </head>
-      <body style={{ fontFamily: "'Google Sans Flex', sans-serif" }} className="min-h-full flex flex-col">
+      <body style={{ fontFamily: "'Google Sans Flex', sans-serif" }} className="h-screen flex flex-col">
         {/* Navbar */}
         <nav className="flex items-center justify-between sticky top-0 bg-white z-100 border-b border-gray-100 px-6 py-4">
           <a href="/" className="flex items-center gap-2 shrink-0">

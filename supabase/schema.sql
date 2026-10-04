@@ -13,7 +13,7 @@ create table if not exists modules (
 
 insert into modules (id, title, description, icon_key, icon_bg, bar_color, order_index, locked, hidden)
 values
-  ('sandbox', 'Sandbox', 'Experiment with RISC-V, CPU states, Caching, and Profiling', 'binary', '#FAEEDC', '#195FA5', 0, false, false),
+  ('sandbox', 'Sandbox', 'Experiment with RISC-V, CPU states, Caching, and Profiling', 'package', '#FAEEDC', '#195FA5', 0, false, false),
   ('binary-arithmetic', 'Binary arithmetic', 'Addition, overflow, two''s complement', 'binary', '#E6F1FB', '#195FA5', 1, false, false),
   ('single-cycle', 'Single cycle', 'Datapath, control signals', 'cpu', '#E9F2DD', '#3F681B', 2, false, false),
   ('pipeline', '5-stage pipeline', 'IF, ID, EX, MEM, WB', 'rows', '#EDECFD', '#4F4898', 3, false, false),

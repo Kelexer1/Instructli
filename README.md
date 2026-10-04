@@ -76,6 +76,7 @@ Note: Only the core files & directories are listed below
 │   ├── Card.tsx                 # Generic content card wrapper
 │   ├── InfoNote.tsx             # Callout/info box used inside module tabs
 │   ├── ModuleCard.tsx           # Card shown on the homepage for each module
+│   ├── WindowTabs.tsx           # Reusable tabbed window wrapper for tool panes
 │   └── types.ts                 # Shared design tokens (the `colors` palette) used across components
 ├── lib
 │   ├── auth
@@ -147,6 +148,17 @@ Admin/instructor login is protected by Shibboleth. There are **two layers** of a
 ### Running the App (Locally)
 
 1. Set up your `.env.local` file as described in [Environment Variables](#environment-variables).
+
+The sandbox emulator requires the Emscripten build artifacts at `public/wasm/riscv.js`
+and `public/wasm/riscv.wasm`. Build them from the checked-in RISC-V sources with:
+
+```sh
+mkdir -p public/wasm
+emcmake cmake -S riscv-emulator-wasm -B /tmp/instructli-riscv-wasm \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DWASM_OUTPUT_DIR="$PWD/public/wasm"
+cmake --build /tmp/instructli-riscv-wasm
+```
 
 2. **To log in locally without a real Shibboleth SP**, set `DEV_SHIB_IDENTITY` to the UTORid or email you want to be treated as (e.g. `DEV_SHIB_IDENTITY=jane.doe@mail.utoronto.ca`) in `.env.local`. This is handled in `lib/auth/session.ts`, in `getShibbolethIdentity()`:
    - It first checks for the real Shibboleth identity headers (as in production).
