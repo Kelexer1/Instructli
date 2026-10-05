@@ -237,10 +237,10 @@ export default function SandboxModule() {
 
   return (
     <main className="flex min-h-0 flex-1 flex-col">
-      <div className="flex min-h-0 flex-1 w-full flex-col px-6 py-6">
+      <div className="flex min-h-0 flex-1 w-full flex-col px-6 py-4">
         {/* Navbar */}
-        <div className="flex w-full flex-row items-start justify-between">
-          <Link href="/" className="mb-6 inline-flex items-center gap-1 self-start text-sm text-gray-400 transition hover:text-gray-700">
+        <div className="flex w-full flex-row items-center gap-x-6 pb-4">
+          <Link href="/" className="inline-flex items-center gap-1 text-sm text-gray-400 transition hover:text-gray-700">
             <ChevronLeft size={16} />
             All modules
           </Link>
@@ -250,7 +250,7 @@ export default function SandboxModule() {
               <File size={15} /> File
             </button>
             {fileMenuOpen && (
-              <div className="absolute right-0 top-9 z-10 w-40 rounded-md border border-slate-200 bg-white p-1 shadow-lg">
+              <div className="absolute left-0 top-9 z-10 w-40 rounded-md border border-slate-200 bg-white p-1 shadow-lg">
                 <button type="button" onClick={openFilePicker} className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-slate-50"><FileUp size={15} /> Open file</button>
                 <button type="button" onClick={saveSource} className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-slate-50"><FileDown size={15} /> Save file</button>
               </div>
@@ -276,7 +276,7 @@ export default function SandboxModule() {
               />
             </div>
             <WindowTabs
-              className="min-h-0 min-w-0 flex-1"
+              className="ml-6 min-h-0 min-w-0 flex-1"
               panelClassName="flex min-h-0 p-0"
               ariaLabel="Editor windows"
               tabs={[

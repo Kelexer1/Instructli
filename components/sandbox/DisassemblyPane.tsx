@@ -35,7 +35,7 @@ export default function DisassemblyPane({
 
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-gray-100 bg-gray-50 px-4 py-2">
+      <div className="flex h-11 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-gray-100 bg-gray-50 px-4">
         <div>
           <h2 className="text-xs font-medium text-gray-700">Disassembly</h2>
           <p className="text-[11px] text-gray-400">{instructions.length} instructions</p>

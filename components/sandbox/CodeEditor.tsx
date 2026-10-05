@@ -53,7 +53,7 @@ export default function CodeEditor({
 
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-      <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-4 py-2 text-xs text-gray-400">
+      <div className="flex h-11 shrink-0 items-center justify-between border-b border-gray-100 bg-gray-50 px-4 text-xs text-gray-400">
         <span className="font-medium text-gray-700">main.s</span>
         <span>{lines.length} {lines.length === 1 ? 'line' : 'lines'}</span>
       </div>

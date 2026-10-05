@@ -34,7 +34,6 @@ export default function TerminalPane({ output, onInput, disabled = false }: Term
     <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
       <div className="flex shrink-0 items-center justify-between border-b border-gray-100 bg-gray-50 px-4 py-2 text-xs">
         <h2 className="font-medium text-gray-700">Terminal</h2>
-        <span className="text-gray-400">emulator output</span>
       </div>
       <div
         ref={terminalLogRef}

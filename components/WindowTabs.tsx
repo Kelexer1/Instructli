@@ -62,7 +62,7 @@ export function WindowTabs({
   return (
     <div className={`flex min-h-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm ${className}`}>
       <div
-        className="flex shrink-0 items-end gap-1 overflow-x-auto overflow-y-hidden border-b border-slate-200 bg-slate-50 px-2 pt-2"
+        className="flex h-11 shrink-0 items-end gap-1 overflow-x-auto overflow-y-hidden border-b border-slate-200 bg-slate-50 px-2 pt-2"
         role="tablist"
         aria-label={ariaLabel}
       >
@@ -79,11 +79,10 @@ export function WindowTabs({
               tabIndex={isSelected ? 0 : -1}
               onClick={() => selectTab(tab.id)}
               onKeyDown={(event) => handleTabKeyDown(event, index)}
-              className={`-mb-px shrink-0 border-b-2 px-3 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1 ${
-                isSelected
-                  ? 'border-indigo-500 bg-white text-gray-900'
-                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
-              }`}
+              className={`-mb-px shrink-0 border-b-2 px-3 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1 ${isSelected
+                ? 'border-indigo-500 bg-white text-gray-900 rounded-t-lg'
+                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                }`}
             >
               {tab.label}
             </button>

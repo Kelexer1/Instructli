@@ -73,7 +73,7 @@ export default function RegisterPane({ registers, changedRegisters, onChange }: 
   }
 
   return (
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-l-xl border border-slate-200 bg-slate-50">
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
       <div className="shrink-0 border-b border-slate-200 px-3 py-2">
         <h2 className="text-xs font-medium text-gray-700">Registers</h2>
         <p className="text-[11px] text-gray-400">Current register state</p>
