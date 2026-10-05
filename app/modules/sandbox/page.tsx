@@ -18,6 +18,7 @@ import {
   addWasmBreakpoint,
   removeWasmBreakpoint,
   readWasmLastExecutedAddress,
+  readWasmLastWrittenRegister,
   readWasmExitCode,
   readWasmProgramCounter,
   readWasmRegisters,
@@ -27,6 +28,8 @@ import {
   resetWasmInput,
   runWasm,
   stepWasm,
+  WASM_STOP_BREAKPOINT,
+  WASM_STOP_EBREAK,
   WASM_STOP_EXITED,
   type WasmRegister,
   type WasmOutput,
@@ -166,15 +169,20 @@ export default function SandboxModule() {
       const executedAddress = await readWasmLastExecutedAddress();
       const currentAddress = await readWasmProgramCounter();
       const nextRegisters = await readWasmRegisters();
-      setChangedRegisters(new Set(
-        nextRegisters
-          .filter((register, index) => register.value !== registers[index]?.value)
-          .map((register) => register.number),
-      ));
+      const lastWrittenRegister = await readWasmLastWrittenRegister();
+      const changedRegister = lastWrittenRegister !== null
+        && nextRegisters[lastWrittenRegister]?.value !== registers[lastWrittenRegister]?.value
+        ? lastWrittenRegister
+        : null;
+      setChangedRegisters(changedRegister === null ? new Set() : new Set([changedRegister]));
       setRegisters(nextRegisters);
       setJustExecutedAddress(executedAddress);
       setNextAddress(currentAddress);
-      if (stopReason === WASM_STOP_EXITED) {
+      if (stopReason === WASM_STOP_BREAKPOINT) {
+        setStatus('Program hit breakpoint.');
+      } else if (stopReason === WASM_STOP_EBREAK) {
+        setStatus('Program hit ebreak.');
+      } else if (stopReason === WASM_STOP_EXITED) {
         const exitCode = await readWasmExitCode();
         setStatus(`Program exited with code ${exitCode}.`);
       } else {

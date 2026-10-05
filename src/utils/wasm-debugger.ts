@@ -35,6 +35,8 @@ export interface WasmRegister {
   value: number;
 }
 
+export const WASM_STOP_BREAKPOINT = 0;
+export const WASM_STOP_EBREAK = 2;
 export const WASM_STOP_EXITED = 3;
 
 function loadModule(): Promise<WasmModule> {
@@ -182,6 +184,25 @@ export async function readWasmLastExecutedAddress(): Promise<number> {
   const wasm = await loadModule();
   if (!activeSession) throw new Error('Load the program before reading execution state.');
   return wasm.ccall('wasm_last_pc_old', 'number', ['number'], [activeSession]);
+}
+
+export async function readWasmLastWrittenRegister(): Promise<number | null> {
+  const wasm = await loadModule();
+  if (!activeSession) throw new Error('Load the program before reading execution state.');
+
+  const raw = wasm.ccall('wasm_last_raw', 'number', ['number'], [activeSession]) >>> 0;
+  const opcode = raw & 0x7f;
+  const writesRegister = opcode === 0x03
+    || opcode === 0x13
+    || opcode === 0x17
+    || opcode === 0x33
+    || opcode === 0x37
+    || opcode === 0x67
+    || opcode === 0x6f;
+
+  if (!writesRegister) return null;
+  const register = (raw >>> 7) & 0x1f;
+  return register === 0 ? null : register;
 }
 
 export async function readWasmExitCode(): Promise<number> {
