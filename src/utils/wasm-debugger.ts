@@ -236,6 +236,33 @@ export async function writeWasmRegister(number: number, value: number): Promise<
   if (!written) throw new Error(`Register x${number} could not be updated.`);
 }
 
+export async function readWasmMemory(address: number, size: number): Promise<number> {
+  const wasm = await loadModule();
+  if (!activeSession) throw new Error('Load the program before reading memory.');
+  const readable = wasm.ccall('wasm_memory_readable', 'number', ['number', 'number', 'number'], [
+    activeSession,
+    address >>> 0,
+    size,
+  ]);
+  if (!readable) throw new Error(`Memory read failed at 0x${(address >>> 0).toString(16)}.`);
+  if (size === 1) {
+    return wasm.ccall('wasm_read_u8_value', 'number', ['number', 'number'], [activeSession, address >>> 0]);
+  }
+  return wasm.ccall('wasm_read_u32_value', 'number', ['number', 'number'], [activeSession, address >>> 0]) >>> 0;
+}
+
+export async function writeWasmMemory(address: number, size: number, value: number): Promise<void> {
+  const wasm = await loadModule();
+  if (!activeSession) throw new Error('Load the program before editing memory.');
+  const functionName = size === 1 ? 'wasm_write_u8' : size === 2 ? 'wasm_write_u16' : 'wasm_write_u32';
+  const written = wasm.ccall(functionName, 'number', ['number', 'number', 'number'], [
+    activeSession,
+    address >>> 0,
+    value >>> 0,
+  ]);
+  if (written !== 0) throw new Error(`Memory at 0x${(address >>> 0).toString(16)} could not be updated.`);
+}
+
 export async function addWasmBreakpoint(address: number): Promise<void> {
   const wasm = await loadModule();
   if (!activeSession) throw new Error('Assemble the program before setting breakpoints.');

@@ -8,6 +8,7 @@ import CodeEditor from '@/components/sandbox/CodeEditor';
 import DisassemblyPane from '@/components/sandbox/DisassemblyPane';
 import RegisterPane from '@/components/sandbox/RegisterPane';
 import TerminalPane from '@/components/sandbox/TerminalPane';
+import MemoryPane from '@/components/sandbox/MemoryPane';
 import { WindowTabs } from '@/components/WindowTabs';
 import {
   assembleWasm,
@@ -23,6 +24,8 @@ import {
   readWasmProgramCounter,
   readWasmRegisters,
   writeWasmRegister,
+  readWasmMemory,
+  writeWasmMemory,
   provideWasmInput,
   resumeWasm,
   resetWasmInput,
@@ -330,13 +333,25 @@ export default function SandboxModule() {
           <div className="ml-6 flex h-full min-h-0 w-[40%]">
             <WindowTabs
               className="min-h-0 min-w-0 flex-1"
-              panelClassName="flex min-h-0 p-0"
+              panelClassName="flex min-h-0 overflow-hidden p-0"
               ariaLabel="Tool windows"
               tabs={[
                 {
                   id: 'terminal',
                   label: 'Terminal',
                   content: <TerminalPane output={terminalOutput} onInput={handleTerminalInput} disabled={busy || !loaded} />,
+                },
+                {
+                  id: 'memory',
+                  label: 'Memory',
+                  content: (
+                    <MemoryPane
+                      loaded={loaded}
+                      readValue={readWasmMemory}
+                      writeValue={writeWasmMemory}
+                      onError={setStatus}
+                    />
+                  ),
                 },
               ]}
             />
