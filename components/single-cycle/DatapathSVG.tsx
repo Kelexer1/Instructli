@@ -1,6 +1,7 @@
 import { useState } from "react";
 import React from "react";
 import type { DataPath } from "../../src/utils/return-types";
+import { DATAPATH_COLORS } from "../../src/data/sandbox-single-cycle-ui";
 
 export type DatapathSVGProps = {
   /* Returns the stroke/fill colour for a given DataPath key. */
@@ -20,6 +21,8 @@ export default function DatapathSVG({
   onBlockHover,
 }: DatapathSVGProps) {
   const [hovered, setHovered] = useState<string | null>(null);
+  const [hoverHeight, setHoverHeight] = useState(185);
+  const hoverContentRef = React.useRef<HTMLDivElement>(null);
 
   // Shared helper used by the original visualiser's foreignObject tooltip.
   const hoverTextbox = React.createElement(
@@ -40,6 +43,24 @@ export default function DatapathSVG({
     onBlockHover?.(null);
   };
 
+  React.useLayoutEffect(() => {
+    if (!hovered || !hoverContentRef.current) return;
+
+    const updateHoverHeight = () => {
+      const content = hoverContentRef.current;
+      if (!content) return;
+
+      const contentHeight = Math.max(content.scrollHeight, content.getBoundingClientRect().height);
+      const nextHeight = Math.ceil(contentHeight + 20);
+      setHoverHeight((currentHeight) => currentHeight === nextHeight ? currentHeight : nextHeight);
+    };
+
+    updateHoverHeight();
+    const observer = new ResizeObserver(updateHoverHeight);
+    observer.observe(hoverContentRef.current);
+    return () => observer.disconnect();
+  }, [hoverContent, hovered]);
+
   // When onSegmentClick is supplied, wrap a segment group so it is clickable.
   const seg = (key: keyof DataPath) =>
     onSegmentClick
@@ -55,9 +76,9 @@ export default function DatapathSVG({
   const cAny = (...keys: (keyof DataPath)[]) => {
     for (const k of keys) {
       const colour = getColour(k);
-      if (colour !== "#000000") return colour;
+      if (colour !== DATAPATH_COLORS.inactive) return colour;
     }
-    return "#000000";
+    return DATAPATH_COLORS.inactive;
   };
 
   return (
@@ -65,8 +86,9 @@ export default function DatapathSVG({
       width="100%"
       height="100%"
       viewBox="0 0 884 623"
-      fill="transparent"
+      fill={DATAPATH_COLORS.transparent}
       preserveAspectRatio="xMidYMid meet"
+      style={{ overflow: "visible" }}
     >
       {/* ── INSTRUCTION MEMORY BOX ── */}
       <g
@@ -548,21 +570,13 @@ export default function DatapathSVG({
       </g>
 
       {/* ── HOVER TOOLTIP ── */}
-      {hoverContent && hovered && (
+      {hovered && (
         <>
-          <rect x="1" y="435" width="240" height="185" stroke="black" />
-          <foreignObject x={10} y={440} width={230} height={220}>
-            {hoverContent}
-          </foreignObject>
-        </>
-      )}
-
-      {/* Fallback plain-text tooltip (used by visualiser when no hoverContent) */}
-      {!hoverContent && hovered && (
-        <>
-          <rect x="1" y="435" width="240" height="185" stroke="black" />
-          <foreignObject x={10} y={440} width={230} height={220}>
-            {hoverTextbox}
+          <rect x="1" y="435" width="240" height={hoverHeight} stroke="black" />
+          <foreignObject x={1} y={435} width={240} height={hoverHeight}>
+            <div ref={hoverContentRef} style={{ margin: "10px", overflow: "visible" }}>
+              {hoverContent ?? hoverTextbox}
+            </div>
           </foreignObject>
         </>
       )}

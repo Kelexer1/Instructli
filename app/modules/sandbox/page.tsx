@@ -9,6 +9,9 @@ import DisassemblyPane from '@/components/sandbox/DisassemblyPane';
 import RegisterPane from '@/components/sandbox/RegisterPane';
 import TerminalPane from '@/components/sandbox/TerminalPane';
 import MemoryPane from '@/components/sandbox/MemoryPane';
+import SingleProcessor from '@/components/single-cycle/SingleCycle';
+import { createSandboxSingleCycleSnapshot } from '@/src/utils/sandbox-single-cycle';
+import type { JsonResponse } from '@/src/utils/single-processor';
 import { WindowTabs } from '@/components/WindowTabs';
 import {
   assembleWasm,
@@ -55,6 +58,7 @@ export default function SandboxModule() {
     () => Array.from({ length: 32 }, (_, number) => ({ number, value: 0 })),
   );
   const [changedRegisters, setChangedRegisters] = useState<ReadonlySet<number>>(new Set());
+  const [singleCycleSnapshot, setSingleCycleSnapshot] = useState<JsonResponse | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -69,6 +73,7 @@ export default function SandboxModule() {
     setJustExecutedAddress(null);
     setNextAddress(null);
     setChangedRegisters(new Set());
+    setSingleCycleSnapshot(null);
     setStatus(null);
   }
 
@@ -91,6 +96,7 @@ export default function SandboxModule() {
       setChangedRegisters(new Set());
       setJustExecutedAddress(null);
       setNextAddress(debugState.currentAddress);
+      setSingleCycleSnapshot(null);
       setBreakpointAddresses(new Set());
       setAssemblyState('current');
       setLoaded(false);
@@ -118,6 +124,7 @@ export default function SandboxModule() {
       setChangedRegisters(new Set());
       setJustExecutedAddress(null);
       setNextAddress(debugState.currentAddress);
+      setSingleCycleSnapshot(null);
       setLoaded(true);
       setStatus('Program loaded. Ready to run.');
     } catch (error) {
@@ -181,6 +188,21 @@ export default function SandboxModule() {
       setRegisters(nextRegisters);
       setJustExecutedAddress(executedAddress);
       setNextAddress(currentAddress);
+      const executedInstruction = instructions.find(
+        (instruction) => instruction.address === executedAddress,
+      );
+      if (executedInstruction) {
+        const valuesUsed = action === stepWasm ? registers : nextRegisters;
+        setSingleCycleSnapshot(
+          createSandboxSingleCycleSnapshot(
+            executedInstruction.text,
+            executedAddress,
+            currentAddress,
+            valuesUsed.map((register) => register.value),
+            stopReason,
+          ),
+        );
+      }
       if (stopReason === WASM_STOP_BREAKPOINT) {
         setStatus('Program hit breakpoint.');
       } else if (stopReason === WASM_STOP_EBREAK) {
@@ -273,6 +295,7 @@ export default function SandboxModule() {
           <div className='flex h-full w-[60%] min-w-0 flex-row'>
             <div className="flex w-[20%] min-w-0 shrink-0">
               <RegisterPane
+                pc={nextAddress}
                 registers={registers}
                 changedRegisters={changedRegisters}
                 onChange={handleRegisterChange}
@@ -352,6 +375,41 @@ export default function SandboxModule() {
                       onError={setStatus}
                     />
                   ),
+                },
+                {
+                  id: 'single-cycle',
+                  label: 'Single Cycle',
+                  content: (() => {
+                    const instruction = singleCycleSnapshot?.block_data.instruction_mem.value ?? null;
+                    const isUnsupported = singleCycleSnapshot !== null
+                      && ['jal', 'jalr', 'ecall', 'ebreak', 'fence', 'fence.i'].includes(
+                        singleCycleSnapshot.command_type,
+                      );
+
+                    return (
+                      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                        <div className="shrink-0 border-b border-slate-200 bg-slate-50 px-3 py-2">
+                          <h2 className="text-xs font-medium text-gray-700">Single-cycle datapath</h2>
+                          <p className="text-[11px] text-gray-400">
+                            {instruction ? 'Last executed instruction; hover blocks for values.' : 'No instruction executed.'}
+                          </p>
+                        </div>
+                        <div className="min-h-0 flex-1 p-2">
+                          {instruction && (
+                            <p className="mb-2 text-center font-mono text-sm font-semibold text-gray-700">
+                              {instruction}
+                            </p>
+                          )}
+                          {isUnsupported && (
+                            <p className="mb-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-center text-xs text-amber-800">
+                              This instruction cannot be fully represented by the single-cycle CPU diagram.
+                            </p>
+                          )}
+                          <SingleProcessor results={isUnsupported ? null : singleCycleSnapshot} />
+                        </div>
+                      </div>
+                    );
+                  })(),
                 },
               ]}
             />

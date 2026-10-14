@@ -286,7 +286,7 @@ export default function PipelineProcessorQuiz() {
   const hoverContent = hoverText
     ? React.createElement("div", {
         xmlns: "http://www.w3.org/1999/xhtml",
-        style: { fontSize: 12, whiteSpace: "pre-wrap", wordWrap: "break-word", color: "black", height: "150px", overflow: "auto", padding: "5px", marginRight: "10px" },
+        style: { fontSize: 12, whiteSpace: "pre-wrap", wordWrap: "break-word", color: "black", padding: "5px" },
       }, hoverText)
     : undefined;
 

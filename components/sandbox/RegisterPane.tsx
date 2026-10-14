@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { WasmRegister } from '@/src/utils/wasm-debugger';
 
 interface RegisterPaneProps {
+  pc: number | null;
   registers: WasmRegister[];
   changedRegisters: ReadonlySet<number>;
   onChange: (registerNumber: number, value: number) => void;
@@ -48,7 +49,7 @@ function formatValue(value: number) {
   return `0x${value.toString(16).padStart(8, '0')}`;
 }
 
-export default function RegisterPane({ registers, changedRegisters, onChange }: RegisterPaneProps) {
+export default function RegisterPane({ pc, registers, changedRegisters, onChange }: RegisterPaneProps) {
   const [editingRegister, setEditingRegister] = useState<number | null>(null);
   const [draftValue, setDraftValue] = useState('');
   const [editError, setEditError] = useState<string | null>(null);
@@ -79,6 +80,13 @@ export default function RegisterPane({ registers, changedRegisters, onChange }: 
         <p className="text-[11px] text-gray-400">Current register state</p>
       </div>
       <div className="min-h-0 flex-1 overflow-auto py-2 font-mono text-xs">
+        <div className="flex items-center gap-2 border-b border-slate-200 px-3 py-1 text-gray-800">
+          <span className="w-7 shrink-0">PC</span>
+          <span className="min-w-0 flex-1 truncate text-gray-500">program counter</span>
+          <span className="shrink-0 text-right text-indigo-700">
+            {pc === null ? '—' : formatValue(pc >>> 0)}
+          </span>
+        </div>
         {registers.map((register) => (
           <div key={register.number} className={`flex items-center gap-2 px-3 py-1 text-gray-800 ${changedRegisters.has(register.number) ? 'bg-amber-100' : ''}`}>
             <span className="w-7 shrink-0">{`x${register.number}`}</span>

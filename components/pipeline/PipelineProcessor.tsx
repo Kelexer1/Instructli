@@ -183,7 +183,7 @@ export default function PipelineProcessor({ results, currCycle, currentPreset }:
   const hoverContent = tooltipText
     ? React.createElement(
         "div",
-        { xmlns: "http://www.w3.org/1999/xhtml", style: { fontSize: 12, whiteSpace: "pre-wrap", wordWrap: "break-word", color: "black", height: "150px", overflow: "auto", padding: "5px", marginRight: "10px" } },
+        { xmlns: "http://www.w3.org/1999/xhtml", style: { fontSize: 12, whiteSpace: "pre-wrap", wordWrap: "break-word", color: "black", padding: "5px" } },
         tooltipText
       )
     : undefined;

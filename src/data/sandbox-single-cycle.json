@@ -1,0 +1,62 @@
+{
+  "signals": [
+    "branch_taken", "mux_pc", "pc_increment", "pc_default", "pc_add",
+    "im_reg1", "im_reg2", "im_reg_write", "im_imm_gen", "imm_gen_shift",
+    "imm_gen_mux", "reg1_mux", "reg2_mux", "mux_alu", "zero", "alu_res_mem",
+    "alu_res_mux", "reg2_dm", "dm_mux", "reg_write", "alu_src", "memto_reg",
+    "reg_write_control", "mem_read", "mem_write", "branch", "alu_op_0", "alu_op_1"
+  ],
+  "instructionTypes": {
+    "add": "R", "sub": "R", "and": "R", "or": "R", "xor": "R",
+    "sll": "R", "srl": "R", "sra": "R", "slt": "R", "sltu": "R",
+    "mul": "R", "mulh": "R", "mulhu": "R", "mulhsu": "R",
+    "div": "R", "divu": "R", "rem": "R", "remu": "R",
+    "addi": "I", "andi": "I", "ori": "I", "xori": "I", "slti": "I", "sltiu": "I",
+    "slli": "I", "srli": "I", "srai": "I",
+    "lb": "L", "lh": "L", "lw": "L", "lbu": "L", "lhu": "L",
+    "sb": "S", "sh": "S", "sw": "S",
+    "beq": "B", "bne": "B", "blt": "B", "bge": "B", "bltu": "B", "bgeu": "B",
+    "jal": "J", "jalr": "J",
+    "lui": "U", "auipc": "U",
+    "ecall": "SYSTEM", "ebreak": "SYSTEM", "fence": "SYSTEM", "fence.i": "SYSTEM"
+  },
+  "activeSignals": {
+    "R": [
+      "mux_pc", "pc_increment", "pc_default", "im_reg1", "im_reg2",
+      "im_reg_write", "reg1_mux", "reg2_mux", "mux_alu", "alu_res_mux",
+      "reg_write", "alu_op_0", "alu_op_1", "reg_write_control"
+    ],
+    "I": [
+      "mux_pc", "pc_increment", "pc_default", "im_reg1", "im_reg_write",
+      "im_imm_gen", "reg1_mux", "imm_gen_mux", "mux_alu", "alu_res_mux",
+      "reg_write", "alu_src", "reg_write_control"
+    ],
+    "L": [
+      "mux_pc", "pc_increment", "pc_default", "im_reg1", "im_imm_gen",
+      "im_reg_write", "reg1_mux", "imm_gen_mux", "mux_alu", "alu_res_mem",
+      "reg_write", "dm_mux", "alu_src", "memto_reg", "mem_read"
+    ],
+    "S": [
+      "mux_pc", "pc_increment", "pc_default", "im_reg1", "im_reg2",
+      "im_imm_gen", "reg1_mux", "imm_gen_mux", "mux_alu", "reg2_dm",
+      "alu_res_mem", "alu_src", "mem_write"
+    ],
+    "B": [
+      "mux_pc", "pc_increment", "pc_default", "im_reg1", "im_reg2",
+      "reg1_mux", "reg2_mux", "im_imm_gen", "imm_gen_shift", "mux_alu",
+      "pc_add", "zero", "branch", "alu_op_0"
+    ],
+    "J": [
+      "mux_pc", "pc_increment", "pc_default", "pc_add", "im_reg1",
+      "im_reg_write", "im_imm_gen", "reg1_mux", "mux_alu", "alu_res_mux",
+      "reg_write", "alu_src", "reg_write_control"
+    ],
+    "U": [
+      "mux_pc", "pc_increment", "pc_default", "im_reg_write", "im_imm_gen",
+      "imm_gen_mux", "mux_alu", "alu_res_mux", "reg_write", "alu_src", "reg_write_control"
+    ],
+    "SYSTEM": [
+      "mux_pc", "pc_increment", "pc_default"
+    ]
+  }
+}

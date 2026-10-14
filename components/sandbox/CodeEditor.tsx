@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from 'react';
 
-const INDENT = '  ';
+const INDENT = '    ';
 
 interface CodeEditorProps {
   initialValue?: string;
@@ -73,9 +73,8 @@ export default function CodeEditor({
                 aria-label={`${breakpointLines.has(line) ? 'Remove' : 'Add'} breakpoint on line ${line}`}
                 aria-pressed={breakpointLines.has(line)}
                 onClick={() => onToggleBreakpoint(line)}
-                className={`flex h-6 w-full items-center justify-end gap-2 pr-3 transition-colors hover:bg-gray-100 ${
-                  breakpointLines.has(line) ? 'text-red-500' : ''
-                }`}
+                className={`flex h-6 w-full items-center justify-end gap-2 pr-3 transition-colors hover:bg-gray-100 ${breakpointLines.has(line) ? 'text-red-500' : ''
+                  }`}
               >
                 {breakpointLines.has(line) && <span className="h-2.5 w-2.5 rounded-full bg-red-500" />}
                 {line}
