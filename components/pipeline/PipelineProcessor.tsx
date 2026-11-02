@@ -98,7 +98,7 @@ function formatRegisterValue(value: string, register: string, registers?: WasmRe
   const registerNumber = Number(register.slice(1));
   const liveValue = registers?.find((entry) => entry.number === registerNumber)?.value;
   const normalized = liveValue === undefined
-    ? formatPipelineValue(componentValue(value, `Val(${register})`))
+    ? formatPipelineValue(componentValue(value, "N/A"))
     : formatHex(liveValue);
   return `${register} = ${normalized}`;
 }
@@ -159,17 +159,21 @@ function buildHoverText(
     case "REGISTER FILE":
       if (!stageLabels.ID) return null;
       {
-        const { rs1, rs2, rd } = registerOperands(stageLabels.ID);
-        const read1 = formatRegisterValue(idComp.registers.read_register_1.value, rs1 || "rs1", registers);
+        const { mnemonic, rs1, rs2, rd } = registerOperands(stageLabels.ID);
+        const read1 = ["lui", "auipc"].includes(mnemonic)
+          ? "N/A"
+          : formatRegisterValue(idComp.registers.read_register_1.value, rs1 || "rs1", registers);
         const read2 = rs2
           ? formatRegisterValue(idComp.registers.read_register_2.value, rs2, registers)
           : "N/A";
         const writeValue = formatPipelineValue(componentValue(idComp.registers.write_register.value, rd || "N/A"));
-        const write = rd && writeValue === rd ? `${rd} ← result` : writeValue;
+        const write = isBranchInstruction(mnemonic)
+          ? "Branches do not write a register"
+          : rd && writeValue === rd ? `${rd} ← result` : writeValue;
         return `REGISTER FILE\nStores CPU registers (x0–x31). Allows simultaneous reading of two registers and writing one register per cycle.\n\nInstruction: ${stageLabels.ID}\n\n` +
           `ALU input rs1: ${read1}\n` +
           `ALU input rs2: ${read2}\n\n` +
-          `Destination register receives ALU result: ${write}\n\n`;
+          `${!isBranchInstruction(mnemonic) ? 'Destination register receives ALU result: ' : ''}${write}\n\n`;
       }
 
     case "IMMEDIATE GENERATOR":
@@ -228,7 +232,7 @@ function buildHoverText(
         const selectedValue = exPath.ex_mux
           ? `Immediate: ${formatImmediate(resolvedImmediate)}`
           : rs2
-            ? `ALU input rs2: ${formatPipelineValue(`Val(${rs2})`)}`
+            ? `${formatRegisterValue("", rs2, registers)}`
             : "N/A";
         return `MULTIPLEXER (ALU Input)\nSelects the second operand for the ALU: either a register value or the immediate value.\n\nInstruction: ${stageLabels.EX}\n\n${selectedValue}`;
       }
@@ -270,7 +274,9 @@ function buildHoverText(
   }
 }
 
-export default function PipelineProcessor({ results, currCycle, currentPreset, registers }: PipelineProcessorProps) {
+export default function PipelineProcessor({
+  results, currCycle, currentPreset, registers, instructionAddresses, branchTargets,
+}: PipelineProcessorProps) {
   const [activeBlock, setActiveBlock] = useState<string | null>(null);
   const arrowColour = "#ff0000";
 
@@ -293,7 +299,7 @@ export default function PipelineProcessor({ results, currCycle, currentPreset, r
     ? results.findIndex((result) => result.stages.IF === stageLabels.IF)
     : -1;
   const pcValue = fetchCycle >= 0 ? fetchCycle * 4 : null;
-  const branchInstruction = stageLabels.EX ?? stageLabels.ID ?? stageLabels.IF;
+  const branchInstruction = stageLabels.MEM;
   const branchParts = branchInstruction ? registerOperands(branchInstruction) : null;
   const branchIsTaken = branchParts && isBranchInstruction(branchParts.mnemonic)
     ? branchTaken(branchParts.mnemonic, branchParts.rs1, branchParts.rs2, registers)
@@ -312,7 +318,7 @@ export default function PipelineProcessor({ results, currCycle, currentPreset, r
     activeBlock,
     exPath, wbPath,
     ifComp, idComp, exComp, memComp,
-    stageLabels, hazards, pcValue, registers,
+    stageLabels, hazards, pcValue, registers, instructionAddresses, branchTargets,
   );
 
   const hoverContent = tooltipText

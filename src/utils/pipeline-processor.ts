@@ -2173,18 +2173,7 @@ export function simulatePipeline(instructions: string[]): PipelineState[] | neve
         .filter(reg => writeRegisters.includes(reg) && reg !== '')
         .map(reg => `Data hazard: Register ${reg} is read before it is written in this cycle.`));
 
-      if (branchIndex >= 0 && cycle === executeStarts[branchIndex]) {
-        hazards.push('Control hazard: branch is taken in EX; younger instructions are flushed.');
-        ifpath = {
-          branch_taken: true,
-          mux_pc: true,
-          pc_increment: false,
-          pc_default: false,
-          pc_id: false,
-          pc_im: true,
-          im_id: true,
-        };
-      } else if (branchIndex >= 0 && cycle === executeStarts[branchIndex] + 1) {
+      if (branchIndex >= 0 && cycle === executeStarts[branchIndex] + 1) {
         hazards.push('Control hazard: branch taken. Speculative instructions in ID and IF are flushed.');
         ifpath = {
           branch_taken: true,
