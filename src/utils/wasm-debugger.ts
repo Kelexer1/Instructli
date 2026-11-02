@@ -186,6 +186,17 @@ export async function readWasmLastExecutedAddress(): Promise<number> {
   return wasm.ccall('wasm_last_pc_old', 'number', ['number'], [activeSession]);
 }
 
+export async function readWasmSymbolAddress(name: string): Promise<number | null> {
+  const wasm = await loadModule();
+  if (!activeSession) throw new Error('Assemble the program before resolving symbols.');
+  const address = wasm.ccall('wasm_symbol_value', 'number', [
+    'number',
+    'string',
+    'number',
+  ], [activeSession, name, name.length]) >>> 0;
+  return address === 0xffffffff ? null : address;
+}
+
 export async function readWasmLastWrittenRegister(): Promise<number | null> {
   const wasm = await loadModule();
   if (!activeSession) throw new Error('Load the program before reading execution state.');

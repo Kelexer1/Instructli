@@ -4720,6 +4720,7 @@ var _wasm_line_for_addr = Module['_wasm_line_for_addr'] = makeInvalidEarlyAccess
 var _wasm_bp_add_line = Module['_wasm_bp_add_line'] = makeInvalidEarlyAccess('_wasm_bp_add_line');
 var _wasm_snapshot = Module['_wasm_snapshot'] = makeInvalidEarlyAccess('_wasm_snapshot');
 var _wasm_sym_lookup = Module['_wasm_sym_lookup'] = makeInvalidEarlyAccess('_wasm_sym_lookup');
+var _wasm_symbol_value = Module['_wasm_symbol_value'] = makeInvalidEarlyAccess('_wasm_symbol_value');
 var _wasm_sym_name_for_value = Module['_wasm_sym_name_for_value'] = makeInvalidEarlyAccess('_wasm_sym_name_for_value');
 var _wasm_sym_first = Module['_wasm_sym_first'] = makeInvalidEarlyAccess('_wasm_sym_first');
 var _wasm_sym_next = Module['_wasm_sym_next'] = makeInvalidEarlyAccess('_wasm_sym_next');
@@ -4816,6 +4817,7 @@ function assignWasmExports(wasmExports) {
   assert(typeof wasmExports['wasm_bp_add_line'] != 'undefined', 'missing Wasm export: wasm_bp_add_line');
   assert(typeof wasmExports['wasm_snapshot'] != 'undefined', 'missing Wasm export: wasm_snapshot');
   assert(typeof wasmExports['wasm_sym_lookup'] != 'undefined', 'missing Wasm export: wasm_sym_lookup');
+  assert(typeof wasmExports['wasm_symbol_value'] != 'undefined', 'missing Wasm export: wasm_symbol_value');
   assert(typeof wasmExports['wasm_sym_name_for_value'] != 'undefined', 'missing Wasm export: wasm_sym_name_for_value');
   assert(typeof wasmExports['wasm_sym_first'] != 'undefined', 'missing Wasm export: wasm_sym_first');
   assert(typeof wasmExports['wasm_sym_next'] != 'undefined', 'missing Wasm export: wasm_sym_next');
@@ -4909,6 +4911,7 @@ function assignWasmExports(wasmExports) {
   _wasm_bp_add_line = Module['_wasm_bp_add_line'] = createExportWrapper('wasm_bp_add_line', wasmExports['wasm_bp_add_line'], 3);
   _wasm_snapshot = Module['_wasm_snapshot'] = createExportWrapper('wasm_snapshot', wasmExports['wasm_snapshot'], 2);
   _wasm_sym_lookup = Module['_wasm_sym_lookup'] = createExportWrapper('wasm_sym_lookup', wasmExports['wasm_sym_lookup'], 4);
+  _wasm_symbol_value = Module['_wasm_symbol_value'] = createExportWrapper('wasm_symbol_value', wasmExports['wasm_symbol_value'], 3);
   _wasm_sym_name_for_value = Module['_wasm_sym_name_for_value'] = createExportWrapper('wasm_sym_name_for_value', wasmExports['wasm_sym_name_for_value'], 3);
   _wasm_sym_first = Module['_wasm_sym_first'] = createExportWrapper('wasm_sym_first', wasmExports['wasm_sym_first'], 1);
   _wasm_sym_next = Module['_wasm_sym_next'] = createExportWrapper('wasm_sym_next', wasmExports['wasm_sym_next'], 1);

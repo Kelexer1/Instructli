@@ -101,7 +101,14 @@ export default function PipelineDatapathSVG({
 
   return (
     <>
-      <svg width="100%" height="100%" viewBox="-10 -10 1010 580" fill="transparent" preserveAspectRatio="xMidYMid meet" style={{ overflow: "visible" }}>
+      <svg
+        width="100%"
+        height="100%"
+        viewBox="-10 -10 1010 580"
+        fill="transparent"
+        preserveAspectRatio="xMidYMid meet"
+        style={{ overflow: "visible", position: "relative", zIndex: 10 }}
+      >
         {clickableStages && Object.entries({
           IF:  [-10, 259.758],
           ID:  [283.2967, 465.67],
@@ -507,9 +514,30 @@ export default function PipelineDatapathSVG({
         {/* HOVER DISPLAY */}
         {shouldShowHover && (
           <>
-            <rect x="1" y="400" width="240" height={hoverHeight} stroke="black"/>
-            <foreignObject x={1} y={400} width={240} height={hoverHeight}>
-              <div ref={hoverContentRef} style={{ margin: "10px", overflow: "visible" }}>
+            <rect
+              x="1"
+              y="400"
+              width="240"
+              height={hoverHeight}
+              fill="white"
+              stroke="black"
+            />
+            <foreignObject
+              x={1}
+              y={400}
+              width={240}
+              height={hoverHeight}
+              style={{ overflow: "visible" }}
+            >
+              <div
+                ref={hoverContentRef}
+                style={{
+                  margin: "10px",
+                  overflow: "visible",
+                  height: "auto",
+                  backgroundColor: "white",
+                }}
+              >
                 {hoverContent ?? analysisTextbox}
               </div>
             </foreignObject>

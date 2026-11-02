@@ -62,38 +62,46 @@ function buildHoverText(label: string | null, state: PipelineState, checked: boo
   switch (label) {
     case "PC":
     case "INSTRUCTION MEMORY":
-      return state.stages.IF ? `${label}\n\nFetching: ${state.stages.IF}` : null;
+      return state.stages.IF
+        ? `${label === "PC" ? "PROGRAM COUNTER (PC)\nHolds the address of the current instruction being executed." : "INSTRUCTION MEMORY\nStores all program instructions and outputs the instruction at the given address."}\n\nInstruction: ${state.stages.IF}`
+        : null;
     case "ADD (PC + 4)":
-      return state.stages.IF ? `ADD (PC + 4)\n\nIncrements the PC for the instruction after "${state.stages.IF}".` : null;
+      return state.stages.IF
+        ? `ADDER (PC + 4)\nComputes the next sequential program counter value by adding 4 to the current PC.\n\nInstruction: ${state.stages.IF}`
+        : null;
     case "MUX (Next PC)":
       return state.stages.IF
-        ? `MUX (Next PC)\n\n${state.stageDetails?.IF?.branch_taken ? "Branch taken — selects the branch target." : "No branch taken — selects PC+4."}`
+        ? `MULTIPLEXER (Next PC)\nSelects between the sequential PC (PC+4) or branch target address based on the branch condition.\n\nInstruction: ${state.stages.IF}\n\n${state.stageDetails?.IF?.branch_taken ? "Branch taken — selects the branch target." : "No branch taken — selects PC+4."}`
         : null;
     case "REGISTER FILE":
-      return state.stages.ID ? `REGISTER FILE\n\nDecoding: ${state.stages.ID}` : null;
+      return state.stages.ID
+        ? `REGISTER FILE\nStores CPU registers (x0–x31). Allows simultaneous reading of two registers and writing one register per cycle.\n\nInstruction: ${state.stages.ID}`
+        : null;
     case "IMMEDIATE GENERATOR":
       return state.stages.ID
         ? state.stageDetails?.ID?.id_imm_gen
-          ? `IMMEDIATE GENERATOR\n\nSign-extends the immediate for "${state.stages.ID}".`
+          ? `IMMEDIATE GENERATOR\nExtracts the instruction's immediate field and formats it for use by the datapath.\n\nInstruction: ${state.stages.ID}\n\nSign-extends the immediate.`
           : `IMMEDIATE GENERATOR\n\n"${state.stages.ID}" does not use an immediate — inactive this cycle.`
         : null;
     case "ALU":
-      return state.stages.EX ? `ALU\n\nExecuting: ${state.stages.EX}` : null;
+      return state.stages.EX
+        ? `ARITHMETIC LOGIC UNIT (ALU)\nPerforms arithmetic (add, subtract) and logical (and, or) operations on two 32-bit operands.\n\nInstruction: ${state.stages.EX}`
+        : null;
     case "ADD (Branch Target)":
       return state.stages.EX
-        ? `ADD (Branch Target)\n\nFor "${state.stages.EX}": ${state.stageDetails?.EX?.ex_add ? "computes the branch target." : "not a branch — inactive."}`
+        ? `ADDER (Branch Target)\nComputes the branch target address by adding the sign-extended immediate to the PC.\n\nInstruction: ${state.stages.EX}\n\n${state.stageDetails?.EX?.ex_add ? "Computes the branch target." : "This instruction does not use a branch target."}`
         : null;
     case "MUX (ALU Input)":
       return state.stages.EX
-        ? `MUX (ALU Input)\n\nFor "${state.stages.EX}": ${state.stageDetails?.EX?.ex_mux ? "ALUSrc=1 — immediate selected." : "ALUSrc=0 — register data selected."}`
+        ? `MULTIPLEXER (ALU Input)\nSelects the second operand for the ALU: either a register value or the immediate value.\n\nInstruction: ${state.stages.EX}\n\n${state.stageDetails?.EX?.ex_mux ? "Immediate selected." : "Register data selected."}`
         : null;
     case "DATA MEMORY":
       return state.stages.MEM
-        ? `DATA MEMORY\n\nFor "${state.stages.MEM}": ${state.stageDetails?.MEM?.reg2_dm ? "writing to memory (store)." : "reading from memory (load)."}`
+        ? `DATA MEMORY\nStores program data (loaded by lw, stored by sw). Allows reading and writing in a single cycle.\n\nInstruction: ${state.stages.MEM}\n\n${state.stageDetails?.MEM?.reg2_dm ? "Writing to memory (store)." : state.stageDetails?.MEM?.alu_dm ? "Reading from memory (load)." : "This instruction does not access memory."}`
         : null;
     case "MUX (Write Back)":
       return state.stages.WB
-        ? `MUX (Write Back)\n\nFor "${state.stages.WB}": ${state.stageDetails?.WB?.dm_mux ? "MemToReg=1 — memory data written back." : "MemToReg=0 — ALU result written back."}`
+        ? `MULTIPLEXER (Write Back)\nSelects which value to write back to the register file: ALU result or data from memory.\n\nInstruction: ${state.stages.WB}\n\n${state.stageDetails?.WB?.dm_mux ? "Memory data written back." : "ALU result written back."}`
         : null;
     case "IF/ID":
       return `IF/ID\n\nHolds the fetched instruction and PC so decode can run next cycle without waiting on fetch.`;
@@ -299,7 +307,7 @@ export default function PipelineProcessorQuiz() {
   if (PIPELINE_STATES.length === 0) {
     return (
       <div className="rounded-xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-800">
-        Couldn't build the pipeline simulation for this program. Check the console for details.
+        Couldn&apos;t build the pipeline simulation for this program. Check the console for details.
       </div>
     );
   }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, File, FileDown, FileUp, Play, RotateCcw, StepForward } from 'lucide-react';
 import { recordAnalyticsVisit } from '@/src/utils/analytics';
@@ -10,7 +10,9 @@ import RegisterPane from '@/components/sandbox/RegisterPane';
 import TerminalPane from '@/components/sandbox/TerminalPane';
 import MemoryPane from '@/components/sandbox/MemoryPane';
 import SingleProcessor from '@/components/single-cycle/SingleCycle';
+import PipelineProcessor from '@/components/pipeline/PipelineProcessor';
 import { createSandboxSingleCycleSnapshot } from '@/src/utils/sandbox-single-cycle';
+import { createSandboxPipelineSnapshot } from '@/src/utils/sandbox-pipeline';
 import type { JsonResponse } from '@/src/utils/single-processor';
 import { WindowTabs } from '@/components/WindowTabs';
 import {
@@ -22,6 +24,7 @@ import {
   addWasmBreakpoint,
   removeWasmBreakpoint,
   readWasmLastExecutedAddress,
+  readWasmSymbolAddress,
   readWasmLastWrittenRegister,
   readWasmExitCode,
   readWasmProgramCounter,
@@ -50,6 +53,7 @@ export default function SandboxModule() {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [instructions, setInstructions] = useState<DisassemblyInstruction[]>([]);
+  const [branchTargets, setBranchTargets] = useState<Record<string, number>>({});
   const [justExecutedAddress, setJustExecutedAddress] = useState<number | null>(null);
   const [nextAddress, setNextAddress] = useState<number | null>(null);
   const [breakpointAddresses, setBreakpointAddresses] = useState<ReadonlySet<number>>(new Set());
@@ -59,7 +63,21 @@ export default function SandboxModule() {
   );
   const [changedRegisters, setChangedRegisters] = useState<ReadonlySet<number>>(new Set());
   const [singleCycleSnapshot, setSingleCycleSnapshot] = useState<JsonResponse | null>(null);
+  const [pipelineCycle, setPipelineCycle] = useState(-1);
+  const [activeToolTab, setActiveToolTab] = useState('terminal');
+  const [cpuMode, setCpuMode] = useState<'single-cycle' | 'pipeline'>('single-cycle');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pipelineResults = useMemo(
+    () => createSandboxPipelineSnapshot(instructions),
+    [instructions],
+  );
+  const instructionAddresses = useMemo(
+    () => Object.fromEntries(instructions.map((instruction) => [
+      instruction.text.replace(/,/g, ' ').trim().replace(/\s+/g, ' '),
+      instruction.address,
+    ])),
+    [instructions],
+  );
 
   useEffect(() => {
     recordAnalyticsVisit('sandbox');
@@ -70,16 +88,71 @@ export default function SandboxModule() {
     setAssemblyState((current) => (current === 'none' ? 'none' : 'outdated'));
     setLoaded(false);
     setInstructions([]);
+    setBranchTargets({});
     setJustExecutedAddress(null);
     setNextAddress(null);
     setChangedRegisters(new Set());
     setSingleCycleSnapshot(null);
+    setPipelineCycle(-1);
     setStatus(null);
+  }
+
+  async function handlePipelineStep() {
+    if (pipelineResults.length === 0) {
+      setStatus('Assemble and load a program with supported instructions first.');
+      return;
+    }
+
+    const nextCycle = pipelineCycle + 1;
+    if (nextCycle >= pipelineResults.length) {
+      setStatus('The pipeline has completed. Load the program again to restart it.');
+      return;
+    }
+
+    const writeBackInstruction = pipelineResults[nextCycle]?.stages.WB;
+    if (writeBackInstruction && !writeBackInstruction.includes('bubble')) {
+      const instruction = instructions.find(
+        (candidate) => candidate.text.replace(/,/g, ' ').trim().replace(/\s+/g, ' ')
+          === writeBackInstruction.replace(/,/g, ' ').trim().replace(/\s+/g, ' '),
+      );
+      if (instruction) {
+        await handleExecution(stepWasm);
+      }
+    }
+
+    setPipelineCycle(nextCycle);
+    setStatus(`Advanced the pipelined processor to cycle ${nextCycle + 1}.`);
+  }
+
+  function handleToolTabChange(tabId: string) {
+    setActiveToolTab(tabId);
+  }
+
+  async function handleCpuModeChange(mode: 'single-cycle' | 'pipeline') {
+    if (mode === cpuMode || busy) return;
+
+    setCpuMode(mode);
+    if (loaded) {
+      await handleLoad();
+    }
   }
 
   function flushTerminalOutput() {
     const output = drainWasmOutput();
     if (output.length > 0) setTerminalOutput((current) => [...current, ...output]);
+  }
+
+  async function resolvePipelineBranchTargets(nextInstructions: DisassemblyInstruction[]) {
+    const targets: Record<string, number> = {};
+    for (const instruction of nextInstructions) {
+      const tokens = instruction.text.replace(/,/g, ' ').trim().split(/\s+/);
+      if (!['beq', 'bne', 'blt', 'bge', 'bltu', 'bgeu'].includes(tokens[0]?.toLowerCase() ?? '')) continue;
+      const target = await readWasmSymbolAddress(tokens[3] ?? '');
+      if (target !== null) {
+        targets[instruction.text.replace(/,/g, ' ').trim().replace(/\s+/g, ' ')] = target;
+      }
+    }
+    return targets;
   }
 
   async function handleAssemble() {
@@ -92,11 +165,13 @@ export default function SandboxModule() {
       const debugState = await readWasmDebugState(source);
       const nextRegisters = await readWasmRegisters();
       setInstructions(debugState.instructions);
+      setBranchTargets(await resolvePipelineBranchTargets(debugState.instructions));
       setRegisters(nextRegisters);
       setChangedRegisters(new Set());
       setJustExecutedAddress(null);
       setNextAddress(debugState.currentAddress);
       setSingleCycleSnapshot(null);
+      setPipelineCycle(-1);
       setBreakpointAddresses(new Set());
       setAssemblyState('current');
       setLoaded(false);
@@ -120,11 +195,13 @@ export default function SandboxModule() {
       const debugState = await readWasmDebugState(source);
       const nextRegisters = await readWasmRegisters();
       setInstructions(debugState.instructions);
+      setBranchTargets(await resolvePipelineBranchTargets(debugState.instructions));
       setRegisters(nextRegisters);
       setChangedRegisters(new Set());
       setJustExecutedAddress(null);
       setNextAddress(debugState.currentAddress);
       setSingleCycleSnapshot(null);
+      setPipelineCycle(-1);
       setLoaded(true);
       setStatus('Program loaded. Ready to run.');
     } catch (error) {
@@ -193,6 +270,10 @@ export default function SandboxModule() {
       );
       if (executedInstruction) {
         const valuesUsed = action === stepWasm ? registers : nextRegisters;
+        const instructionTokens = executedInstruction.text.replace(/,/g, ' ').trim().split(/\s+/);
+        const branchTarget = instructionTokens[0]?.match(/^(beq|bne|blt|bge|bltu|bgeu)$/i)
+          ? await readWasmSymbolAddress(instructionTokens[3] ?? '')
+          : null;
         setSingleCycleSnapshot(
           createSandboxSingleCycleSnapshot(
             executedInstruction.text,
@@ -200,6 +281,7 @@ export default function SandboxModule() {
             currentAddress,
             valuesUsed.map((register) => register.value),
             stopReason,
+            branchTarget,
           ),
         );
       }
@@ -285,7 +367,14 @@ export default function SandboxModule() {
             </button>
             <button type="button" onClick={handleLoad} disabled={busy || assemblyState !== 'current'} className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-3 py-1.5 text-sm text-gray-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Load</button>
             <button type="button" onClick={() => handleExecution(runWasm)} disabled={busy || !loaded} className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-3 py-1.5 text-sm text-gray-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"><Play size={15} /> Run</button>
-            <button type="button" onClick={() => handleExecution(stepWasm)} disabled={busy || !loaded} className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-3 py-1.5 text-sm text-gray-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"><StepForward size={15} /> Step</button>
+            <button
+              type="button"
+              onClick={cpuMode === 'pipeline' ? () => void handlePipelineStep() : () => void handleExecution(stepWasm)}
+              disabled={busy || (cpuMode === 'pipeline' ? pipelineResults.length === 0 : !loaded)}
+              className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-3 py-1.5 text-sm text-gray-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <StepForward size={15} /> Step
+            </button>
           </div>
         </div>
         {status && <p role="status" className="mb-3 text-right text-xs text-gray-500">{status}</p>}
@@ -358,6 +447,8 @@ export default function SandboxModule() {
               className="min-h-0 min-w-0 flex-1"
               panelClassName="flex min-h-0 overflow-hidden p-0"
               ariaLabel="Tool windows"
+              activeTabId={activeToolTab}
+              onTabChange={handleToolTabChange}
               tabs={[
                 {
                   id: 'terminal',
@@ -377,39 +468,84 @@ export default function SandboxModule() {
                   ),
                 },
                 {
-                  id: 'single-cycle',
-                  label: 'Single Cycle',
-                  content: (() => {
-                    const instruction = singleCycleSnapshot?.block_data.instruction_mem.value ?? null;
-                    const isUnsupported = singleCycleSnapshot !== null
-                      && ['jal', 'jalr', 'ecall', 'ebreak', 'fence', 'fence.i'].includes(
-                        singleCycleSnapshot.command_type,
-                      );
-
-                    return (
-                      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                        <div className="shrink-0 border-b border-slate-200 bg-slate-50 px-3 py-2">
-                          <h2 className="text-xs font-medium text-gray-700">Single-cycle datapath</h2>
-                          <p className="text-[11px] text-gray-400">
-                            {instruction ? 'Last executed instruction; hover blocks for values.' : 'No instruction executed.'}
-                          </p>
-                        </div>
-                        <div className="min-h-0 flex-1 p-2">
-                          {instruction && (
-                            <p className="mb-2 text-center font-mono text-sm font-semibold text-gray-700">
-                              {instruction}
+                  id: 'cpu',
+                  label: 'CPU',
+                  content: (
+                    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                      <div className="shrink-0 border-b border-slate-200 bg-slate-50 px-3 py-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <h2 className="text-xs font-medium text-gray-700">
+                              {cpuMode === 'pipeline' ? 'Pipelined datapath' : 'Single-cycle datapath'}
+                            </h2>
+                            <p className="text-[11px] text-gray-400">
+                              {cpuMode === 'pipeline'
+                                ? pipelineCycle >= 0
+                                  ? `Cycle ${pipelineResults[pipelineCycle]?.cycle ?? pipelineCycle + 1}; instructions are shown per logical stage.`
+                                  : 'Execute an instruction to inspect the pipeline stages.'
+                                : singleCycleSnapshot?.block_data.instruction_mem.value
+                                  ? 'Last executed instruction; hover blocks for values.'
+                                  : 'No instruction executed.'}
                             </p>
-                          )}
-                          {isUnsupported && (
-                            <p className="mb-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-center text-xs text-amber-800">
-                              This instruction cannot be fully represented by the single-cycle CPU diagram.
-                            </p>
-                          )}
-                          <SingleProcessor results={isUnsupported ? null : singleCycleSnapshot} />
+                          </div>
+                          <div className="inline-flex shrink-0 rounded-md border border-slate-200 bg-white p-0.5" role="group" aria-label="CPU mode">
+                            <button
+                              type="button"
+                              onClick={() => void handleCpuModeChange('single-cycle')}
+                              disabled={busy}
+                              aria-pressed={cpuMode === 'single-cycle'}
+                              className={`rounded px-2 py-1 text-[11px] transition ${cpuMode === 'single-cycle' ? 'bg-indigo-100 font-medium text-indigo-700' : 'text-gray-500 hover:text-gray-700'} disabled:cursor-not-allowed disabled:opacity-60`}
+                            >
+                              Single Cycle
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleCpuModeChange('pipeline')}
+                              disabled={busy}
+                              aria-pressed={cpuMode === 'pipeline'}
+                              className={`rounded px-2 py-1 text-[11px] transition ${cpuMode === 'pipeline' ? 'bg-indigo-100 font-medium text-indigo-700' : 'text-gray-500 hover:text-gray-700'} disabled:cursor-not-allowed disabled:opacity-60`}
+                            >
+                              Pipelined
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    );
-                  })(),
+                      <div className="min-h-0 flex-1 overflow-auto p-2">
+                        {cpuMode === 'pipeline' ? (
+                          <PipelineProcessor
+                            results={pipelineResults}
+                            currCycle={pipelineCycle}
+                            currentPreset={null}
+                            registers={registers}
+                            instructionAddresses={instructionAddresses}
+                            branchTargets={branchTargets}
+                          />
+                        ) : (() => {
+                          const instruction = singleCycleSnapshot?.block_data.instruction_mem.value ?? null;
+                          const isUnsupported = singleCycleSnapshot !== null
+                            && ['jal', 'jalr', 'ecall', 'ebreak', 'fence', 'fence.i'].includes(
+                              singleCycleSnapshot.command_type,
+                            );
+
+                          return (
+                            <>
+                              {instruction && (
+                                <p className="mb-2 text-center font-mono text-sm font-semibold text-gray-700">
+                                  {instruction}
+                                </p>
+                              )}
+                              {isUnsupported && (
+                                <p className="mb-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-center text-xs text-amber-800">
+                                  This instruction cannot be fully represented by the single-cycle CPU diagram.
+                                </p>
+                              )}
+                              <SingleProcessor results={isUnsupported ? null : singleCycleSnapshot} />
+                            </>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  ),
                 },
               ]}
             />

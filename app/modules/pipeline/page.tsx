@@ -100,17 +100,13 @@ export default function PipelineModule() {
   };
 
   const handleExecute = async (preset: number) => {
-    const newCycle = currCycle + 1;
-    setCurrCycle(newCycle);
     const data = handlePipeLinePreset(preset);
     setResults(data);
-
-    if (currCycle >= data[data.length - 1].cycle) {
-      setCurrCycle(0);
-    }
+    const newCycle = currCycle + 1 >= data.length ? 0 : currCycle + 1;
+    setCurrCycle(newCycle);
 
     localStorage.setItem("pipelineDiagram", JSON.stringify(data));
-    localStorage.setItem("currCycle", JSON.stringify(newCycle % (data[data.length - 1].cycle + 1)));
+    localStorage.setItem("currCycle", JSON.stringify(newCycle));
   };
 
   const handleReset = () => {
@@ -298,13 +294,13 @@ export default function PipelineModule() {
                 />
               </div>
 
-              <div className="flex-1 min-w-0 overflow-auto bg-white pb-[30]">
+              <div className="relative z-10 flex-1 min-w-0 overflow-visible bg-white pb-[30]">
                 <PipelineProcessor results={results} currCycle={currCycle} currentPreset={currentPreset} />
               </div>
             </Card>
 
             <Card variant="simulation" title="Trace the datapath">
-              <div className="flex-1 min-w-0 overflow-auto bg-white pb-[30px]">
+              <div className="relative z-10 flex-1 min-w-0 overflow-visible bg-white pb-[30px]">
                 <PipelineQuiz />
               </div>
             </Card>

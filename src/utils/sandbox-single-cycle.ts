@@ -89,6 +89,7 @@ export function createSandboxSingleCycleSnapshot(
   nextPc: number,
   registers: readonly number[],
   stopStatus: number,
+  symbolAddress: number | null = null,
 ): JsonResponse {
   const tokens = instruction.replace(/,/g, ' ').trim().split(/\s+/);
   const mnemonic = tokens[0]?.toLowerCase() ?? '';
@@ -131,9 +132,8 @@ export function createSandboxSingleCycleSnapshot(
   const parsedImmediate = isBranch
     ? branchImmediate(tokens[3], pc)
     : encodedImmediate;
-  const resolvedBranchImmediate = isBranch && parsedImmediate === null
-    && nextPc !== ((pc + 4) >>> 0)
-    ? nextPc - pc
+  const resolvedBranchImmediate = isBranch && parsedImmediate === null && symbolAddress !== null
+    ? symbolAddress - pc
     : null;
   const immediate = parsedImmediate ?? resolvedBranchImmediate;
   const immediateValue = immediate ?? 0;
@@ -182,8 +182,8 @@ export function createSandboxSingleCycleSnapshot(
         ? 'Branch target is symbolic and cannot be resolved'
         : `${hex(pc)} + ${hex(immediate)} = ${hex((pc + immediate) >>> 0)}`,
     };
-    blockData.registers.read_register_1 = { value: `x${rs1} = ${hex(firstValue)}`, comment: 'Branch comparison operand rs1' };
-    blockData.registers.read_register_2 = { value: `x${rs2} = ${hex(secondValue)}`, comment: 'Branch comparison operand rs2' };
+    blockData.registers.read_register_1 = { value: `x${rs1} = ${hex(firstValue)}`, comment: 'ALU input rs1' };
+    blockData.registers.read_register_2 = { value: `x${rs2} = ${hex(secondValue)}`, comment: 'ALU input rs2' };
     blockData.registers.write_register = { value: 'N/A', comment: 'Branches do not write a register' };
     blockData.alu.alu_result = `${mnemonic.toUpperCase()} ${branchTaken ? 'taken' : 'not taken'}`;
     blockData.data_memory.read_data = 'No data read';
