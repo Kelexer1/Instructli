@@ -13,6 +13,8 @@ import SingleProcessor from '@/components/single-cycle/SingleCycle';
 import PipelineProcessor from '@/components/pipeline/PipelineProcessor';
 import { createSandboxSingleCycleSnapshot } from '@/src/utils/sandbox-single-cycle';
 import { createSandboxPipelineSnapshot } from '@/src/utils/sandbox-pipeline';
+import { createSandboxCpuData } from '@/src/utils/sandbox-cpu-data';
+import type { SandboxCpuData } from '@/src/utils/sandbox-cpu-data';
 import type { JsonResponse } from '@/src/utils/single-processor';
 import { WindowTabs } from '@/components/WindowTabs';
 import {
@@ -67,6 +69,18 @@ export default function SandboxModule() {
   const [activeToolTab, setActiveToolTab] = useState('terminal');
   const [cpuMode, setCpuMode] = useState<'single-cycle' | 'pipeline'>('single-cycle');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cpuData: SandboxCpuData = useMemo(
+    () => createSandboxCpuData(
+      registers.map((register) => register.value),
+      {
+        programCounter: nextAddress ?? 0,
+        lastExecutedAddress: justExecutedAddress,
+        readMemory: readWasmMemory,
+        writeMemory: writeWasmMemory,
+      },
+    ),
+    [justExecutedAddress, nextAddress, registers],
+  );
   const pipelineResults = useMemo(
     () => createSandboxPipelineSnapshot(instructions),
     [instructions],
@@ -279,8 +293,16 @@ export default function SandboxModule() {
             executedInstruction.text,
             executedAddress,
             currentAddress,
-            valuesUsed.map((register) => register.value),
-            stopReason,
+            createSandboxCpuData(
+              valuesUsed.map((register) => register.value),
+              {
+                programCounter: currentAddress,
+                lastExecutedAddress: executedAddress,
+                stopStatus: stopReason,
+                readMemory: cpuData.readMemory,
+                writeMemory: cpuData.writeMemory,
+              },
+            ),
             branchTarget,
           ),
         );
@@ -461,8 +483,8 @@ export default function SandboxModule() {
                   content: (
                     <MemoryPane
                       loaded={loaded}
-                      readValue={readWasmMemory}
-                      writeValue={writeWasmMemory}
+                      readValue={cpuData.readMemory}
+                      writeValue={cpuData.writeMemory}
                       onError={setStatus}
                     />
                   ),
@@ -516,7 +538,7 @@ export default function SandboxModule() {
                             results={pipelineResults}
                             currCycle={pipelineCycle}
                             currentPreset={null}
-                            registers={registers}
+                            cpuData={cpuData}
                             instructionAddresses={instructionAddresses}
                             branchTargets={branchTargets}
                           />

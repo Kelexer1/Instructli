@@ -1,4 +1,9 @@
 import { instructionTypeMap } from '@/src/utils/pipeline-types';
+import {
+  PIPELINE_STAGES,
+  isBranchInstruction,
+  isStoreInstruction,
+} from '@/src/data/sandbox-instructions';
 import { handlePipeLinePreset, simulatePipeline } from '@/src/utils/pipeline-processor';
 import type { DisassemblyInstruction } from '@/src/utils/wasm-debugger';
 import type { PipelineState } from '@/src/utils/pipeline-types';
@@ -90,7 +95,7 @@ export function createSandboxPipelineSnapshot(
   }
 
   const baseline = simulatePipeline(supportedInstructions);
-  const normalized = supportedInstructions.map((instruction) => normalizeInstruction(instruction));
+  const normalized = supportedInstructions;
   const fetchStarts = normalized.map((_, index) => index + 1);
   const executeStarts = normalized.map((_, index) => index + 3);
   const writers = normalized.map((instruction) => getWrittenRegister(instruction));
@@ -110,14 +115,17 @@ export function createSandboxPipelineSnapshot(
   }
 
   const branchIndex = normalized.findIndex((instruction) => isBranch(instruction));
-  const lastVisibleInstruction = branchIndex >= 0 ? branchIndex : normalized.length - 1;
+  const branchOutcome = branchIndex >= 0 ? getKnownBranchOutcome(normalized[branchIndex]) : null;
+  const lastVisibleInstruction = branchIndex >= 0 && branchOutcome === true
+    ? branchIndex
+    : normalized.length - 1;
   const endCycle = Math.max(
     ...executeStarts.slice(0, lastVisibleInstruction + 1).map((start) => start + 3),
     normalized.length + 5,
   );
   const templates = new Map<string, PipelineState>();
   for (const state of baseline) {
-    for (const stage of ['IF', 'ID', 'EX', 'MEM', 'WB'] as const) {
+    for (const stage of PIPELINE_STAGES) {
       const instruction = state.stages[stage];
       if (instruction && !instruction.includes('bubble')) {
         templates.set(`${stage}:${normalizeInstruction(instruction)}`, state);
@@ -135,7 +143,8 @@ export function createSandboxPipelineSnapshot(
     normalized.slice(0, lastVisibleInstruction + 1).forEach((instruction, index) => {
       const fetch = fetchStarts[index];
       const execute = executeStarts[index];
-      if (branchIndex >= 0 && index > branchIndex && cycle >= executeStarts[branchIndex]) return;
+      if (branchIndex >= 0 && branchOutcome === true
+        && index > branchIndex && cycle >= executeStarts[branchIndex]) return;
       const visible = (stage: 'IF' | 'ID' | 'EX' | 'MEM' | 'WB', start: number) => {
         if (cycle !== start) return;
         stages[stage] = supportedInstructions[index];
@@ -191,7 +200,9 @@ export function createSandboxPipelineSnapshot(
     if (dataHazard) hazards.push('Data hazard: dependent instruction is held in ID until the producer reaches WB. An EX bubble is inserted.');
 
     if (branchIndex >= 0 && cycle === executeStarts[branchIndex]) {
-      hazards.push(`Control hazard: ${supportedInstructions[branchIndex]} changes control flow. Younger instructions are flushed.`);
+      hazards.push(branchOutcome === false
+        ? `Control hazard: ${supportedInstructions[branchIndex]} is not taken. The sequential instructions continue through the pipeline.`
+        : `Control hazard: ${supportedInstructions[branchIndex]} changes control flow. Younger instructions are flushed.`);
     }
 
     return {
@@ -207,20 +218,25 @@ export function createSandboxPipelineSnapshot(
 function getReadRegisters(instruction: string) {
   const [mnemonic, ...operands] = instruction.split(' ');
   const registers = operands.filter((operand) => /^x\d+$/i.test(operand));
-  if (['sw', 'sb', 'sh'].includes(mnemonic)) return new Set(registers);
+  if (isStoreInstruction(mnemonic)) return new Set(registers);
   if (isBranch(instruction)) return new Set(registers.slice(0, 2));
-  if (instructionTypeMap[mnemonic] === 0 || instructionTypeMap[mnemonic] === 1) {
-    return new Set(registers.slice(1));
-  }
   return new Set(registers.slice(1));
 }
 
 function getWrittenRegister(instruction: string) {
   const [mnemonic, destination] = instruction.split(' ');
-  if (['sw', 'sb', 'sh', 'beq', 'bne', 'blt', 'bge', 'bltu', 'bgeu'].includes(mnemonic)) return null;
+  if (isStoreInstruction(mnemonic) || isBranchInstruction(mnemonic)) return null;
   return /^x\d+$/i.test(destination ?? '') ? destination : null;
 }
 
 function isBranch(instruction: string) {
-  return ['beq', 'bne', 'blt', 'bge', 'bltu', 'bgeu', 'jal', 'jalr'].includes(instruction.split(' ')[0]);
+  return isBranchInstruction(instruction.split(' ')[0] ?? '');
+}
+
+function getKnownBranchOutcome(instruction: string): boolean | null {
+  const [mnemonic, rs1, rs2] = instruction.split(' ');
+  if (!isBranch(instruction) || !rs1 || !rs2) return null;
+  if (rs1 === rs2) return mnemonic === 'beq' || mnemonic === 'bge' || mnemonic === 'bgeu';
+  if (rs1 !== 'x0' || rs2 !== 'x0') return null;
+  return mnemonic === 'beq' || mnemonic === 'bge' || mnemonic === 'bgeu';
 }

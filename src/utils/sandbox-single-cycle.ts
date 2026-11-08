@@ -1,33 +1,28 @@
 import type { DataPath, Block_Data } from '@/src/utils/return-types';
 import type { JsonResponse } from '@/src/utils/single-processor';
 import datapathConfig from '@/src/data/sandbox-single-cycle.json';
+import { EMPTY_BLOCK_DATA } from '@/src/data/sandbox-single-cycle-ui';
+import type { SandboxCpuData } from '@/src/utils/sandbox-cpu-data';
+import {
+  buildAluDetails,
+  buildImmediateDetails,
+  buildRegisterReadDetails,
+  buildRegisterWriteDetails,
+} from '@/src/data/sandbox-hover-messages';
+import {
+  formatAdderCalculation,
+  formatBranchTargetValue,
+  formatInstructionFetch,
+  formatMemoryRead,
+  formatMemoryWrite,
+  formatPcValue,
+} from '@/src/data/sandbox-messages';
 
 type InstructionType = keyof typeof datapathConfig.activeSignals;
-
-const emptyBlockData: Block_Data = {
-  pc: { value: '', comment: '' },
-  instruction_mem: { value: '', comment: '' },
-  default_adder: { value: '' },
-  registers: {
-    read_register_1: { value: '', comment: '' },
-    read_register_2: { value: '', comment: '' },
-    write_register: { value: '', comment: '' },
-  },
-  alu: { alu_result: '' },
-  data_memory: { read_data: '', write_data: '' },
-};
-
-function hex(value: number) {
-  return `0x${(value >>> 0).toString(16).padStart(8, '0').toUpperCase()}`;
-}
 
 function registerNumber(token: string | undefined) {
   const match = token?.match(/^x(\d+)$/i);
   return match ? Number(match[1]) : null;
-}
-
-function registerValue(registers: readonly number[], number: number | null) {
-  return number === null ? 0 : registers[number] ?? 0;
 }
 
 function signedImmediate(token: string | undefined) {
@@ -87,8 +82,7 @@ export function createSandboxSingleCycleSnapshot(
   instruction: string,
   pc: number,
   nextPc: number,
-  registers: readonly number[],
-  stopStatus: number,
+  cpuData: SandboxCpuData,
   symbolAddress: number | null = null,
 ): JsonResponse {
   const tokens = instruction.replace(/,/g, ' ').trim().split(/\s+/);
@@ -96,16 +90,16 @@ export function createSandboxSingleCycleSnapshot(
   const instructionType = classifyInstruction(mnemonic);
   const dataPath = createDataPath(instructionType);
   const blockData: Block_Data = {
-    ...emptyBlockData,
-    pc: { ...emptyBlockData.pc },
-    instruction_mem: { ...emptyBlockData.instruction_mem },
-    default_adder: { ...emptyBlockData.default_adder },
+    ...EMPTY_BLOCK_DATA,
+    pc: { ...EMPTY_BLOCK_DATA.pc },
+    instruction_mem: { ...EMPTY_BLOCK_DATA.instruction_mem },
+    default_adder: { ...EMPTY_BLOCK_DATA.default_adder },
     registers: {
-      read_register_1: { ...emptyBlockData.registers.read_register_1 },
-      read_register_2: { ...emptyBlockData.registers.read_register_2 },
-      write_register: { ...emptyBlockData.registers.write_register },
+      read_register_1: { ...EMPTY_BLOCK_DATA.registers.read_register_1 },
+      read_register_2: { ...EMPTY_BLOCK_DATA.registers.read_register_2 },
+      write_register: { ...EMPTY_BLOCK_DATA.registers.write_register },
     },
-    data_memory: { ...emptyBlockData.data_memory },
+    data_memory: { ...EMPTY_BLOCK_DATA.data_memory },
   };
 
   const memoryOperand = tokens[2]?.match(/^(-?\d+)\((x\d+)\)$/i);
@@ -126,8 +120,8 @@ export function createSandboxSingleCycleSnapshot(
     : isStore
       ? rd
       : registerNumber(tokens[3]);
-  const firstValue = registerValue(registers, rs1);
-  const secondValue = registerValue(registers, rs2);
+  const firstValue = rs1 === null ? 0 : cpuData.readRegister(rs1);
+  const secondValue = rs2 === null ? 0 : cpuData.readRegister(rs2);
   const encodedImmediate = instructionImmediate(instructionType, tokens, memoryOperand);
   const parsedImmediate = isBranch
     ? branchImmediate(tokens[3], pc)
@@ -138,11 +132,11 @@ export function createSandboxSingleCycleSnapshot(
   const immediate = parsedImmediate ?? resolvedBranchImmediate;
   const immediateValue = immediate ?? 0;
 
-  blockData.pc.value = `PC ${hex(pc)} → ${hex(nextPc)}`;
+  blockData.pc.value = formatPcValue(pc, nextPc);
   blockData.pc.comment = '';
-  blockData.default_adder.value = `${hex(pc)} + 4 = ${hex((pc + 4) >>> 0)}`;
+  blockData.default_adder.value = formatAdderCalculation(pc, 4);
   blockData.instruction_mem.value = instruction;
-  blockData.instruction_mem.comment = `Fetched at address ${hex(pc)}`;
+  blockData.instruction_mem.comment = formatInstructionFetch(pc);
 
   if (isBranch) {
     const signedFirstValue = firstValue | 0;
@@ -172,19 +166,17 @@ export function createSandboxSingleCycleSnapshot(
     dataPath.branch = true;
     dataPath.branch_taken = branchTaken;
     dataPath.alu_op_0 = true;
-    blockData.immediate_generator = {
-      value: immediate === null
-        ? 'Immediate: symbolic branch target'
-        : `Immediate: ${hex(immediate)}`,
-    };
+    blockData.immediate_generator = buildImmediateDetails(immediate, immediate === null);
     blockData.branch_adder = {
       value: immediate === null
         ? 'Branch target is symbolic and cannot be resolved'
-        : `${hex(pc)} + ${hex(immediate)} = ${hex((pc + immediate) >>> 0)}`,
+        : formatBranchTargetValue(pc, immediate),
     };
-    blockData.registers.read_register_1 = { value: `x${rs1} = ${hex(firstValue)}`, comment: 'ALU input rs1' };
-    blockData.registers.read_register_2 = { value: `x${rs2} = ${hex(secondValue)}`, comment: 'ALU input rs2' };
-    blockData.registers.write_register = { value: '', comment: 'Branches do not write a register' };
+    blockData.registers.read_register_1 = buildRegisterReadDetails(rs1, firstValue, 'ALU input rs1');
+    blockData.registers.read_register_2 = buildRegisterReadDetails(rs2, secondValue, 'ALU input rs2');
+    blockData.registers.write_register = buildRegisterWriteDetails({
+      rd, mnemonic, isBranch: true,
+    });
     blockData.alu.alu_result = `${mnemonic.toUpperCase()} ${branchTaken ? 'taken' : 'not taken'}`;
     blockData.data_memory.read_data = 'No data read';
     blockData.data_memory.write_data = 'No data written';
@@ -197,13 +189,16 @@ export function createSandboxSingleCycleSnapshot(
     dataPath.alu_src = true;
     dataPath.alu_res_mux = true;
     dataPath.reg_write_control = true;
-    blockData.immediate_generator = { value: `Immediate: ${hex(immediateValue)}` };
+    blockData.immediate_generator = buildImmediateDetails(immediateValue);
     blockData.registers.read_register_1 = { value: 'N/A', comment: 'Upper-immediate instructions do not read rs1' };
     blockData.registers.read_register_2 = { value: 'N/A', comment: 'Upper-immediate instructions do not read rs2' };
-    blockData.registers.write_register = { value: `x${rd} ← result`, comment: `${mnemonic.toUpperCase()} writes the immediate-derived value to rd` };
-    blockData.alu.alu_result = mnemonic === 'auipc'
-      ? `${hex(pc)} + ${hex(immediateValue)}`
-      : `Immediate = ${hex(immediateValue)}`;
+    blockData.registers.write_register = buildRegisterWriteDetails({
+      rd, mnemonic, isUpperImmediate: true,
+    });
+    blockData.alu.alu_result = buildAluDetails(
+      mnemonic, firstValue, secondValue, immediateValue,
+      { isUpperImmediate: true, pc },
+    );
     blockData.data_memory.read_data = 'No data read';
     blockData.data_memory.write_data = 'No data written';
   } else if (isStore || isLoad || isImmediate || isRegister) {
@@ -227,24 +222,25 @@ export function createSandboxSingleCycleSnapshot(
     dataPath.memto_reg = isLoad;
     dataPath.alu_op_0 = isRegister || isStore;
     dataPath.alu_op_1 = isRegister;
-    blockData.immediate_generator = !isRegister ? { value: `Immediate: ${hex(immediateValue)}` } : undefined;
-    blockData.registers.read_register_1 = { value: `x${rs1} = ${hex(firstValue)}`, comment: 'ALU input rs1' };
+    blockData.immediate_generator = !isRegister ? buildImmediateDetails(immediateValue) : undefined;
+    blockData.registers.read_register_1 = buildRegisterReadDetails(rs1, firstValue, 'ALU input rs1');
     blockData.registers.read_register_2 = usesSecondRegister
-      ? { value: `x${rs2} = ${hex(secondValue)}`, comment: isStore ? 'Data written to memory' : 'ALU input rs2' }
+      ? buildRegisterReadDetails(rs2, secondValue, isStore ? 'Data written to memory' : 'ALU input rs2')
       : { value: 'N/A', comment: 'ALU input rs2' };
-    blockData.registers.write_register = isStore
-      ? { value: 'N/A', comment: 'Stores do not write a register' }
-      : { value: `x${rd} ← result`, comment: `Destination register receives the ${isLoad ? 'loaded memory value' : 'ALU result'}` };
-    blockData.alu.alu_result = isLoad || isStore
-      ? `Address = ${hex(firstValue)} + ${hex(immediateValue)}`
-      : `${mnemonic.toUpperCase()} uses ${hex(firstValue)}${isRegister ? ` and ${hex(secondValue)}` : ` and ${hex(immediateValue)}`}`;
-    blockData.data_memory.read_data = isLoad ? `Read at ${hex((firstValue + immediateValue) >>> 0)}` : 'No data read';
-    blockData.data_memory.write_data = isStore ? `Write ${hex(secondValue)} at ${hex((firstValue + immediateValue) >>> 0)}` : 'No data written';
+    blockData.registers.write_register = buildRegisterWriteDetails({
+      rd, mnemonic, isLoad, isStore,
+    });
+    blockData.alu.alu_result = buildAluDetails(
+      mnemonic, firstValue, secondValue, immediateValue,
+      { isLoad, isStore, isRegister },
+    );
+    blockData.data_memory.read_data = isLoad ? formatMemoryRead((firstValue + immediateValue) >>> 0) : 'No data read';
+    blockData.data_memory.write_data = isStore ? formatMemoryWrite(secondValue, (firstValue + immediateValue) >>> 0) : 'No data written';
   } else {
     blockData.instruction_mem.comment = 'The instruction is not represented by a dedicated single-cycle control mapping';
   }
 
-  if (stopStatus === 3) {
+  if (cpuData.stopStatus === 3) {
     blockData.pc.comment += ' The program has exited after this instruction';
   }
 

@@ -2,6 +2,7 @@ import {
   instructionTypeMap, CommandType, PipelineState, IFPath,
   IDPath, EXPath, MEMPath, WBPath, IFComponents, IDComponents, EXComponents, MEMComponents
 } from "./pipeline-types";
+import { formatUpperImmediate } from "@/src/data/sandbox-messages";
 
 type PipelineStage = 'IF' | 'ID' | 'EX' | 'MEM' | 'WB';
 
@@ -1865,7 +1866,7 @@ export function simulatePipeline(instructions: string[]): PipelineState[] | neve
             read_register_2: { value: 'N/A', comment: 'Upper-immediate instructions do not read rs2' },
             write_register: { value: writeRegister, comment: 'write the shifted immediate to the destination register' }
           },
-          imm_gen: { value: `Immediate: ${immediate}` }
+          imm_gen: { value: `Immediate: ${formatUpperImmediate(immediate)}` }
         };
       }
 
@@ -2007,7 +2008,7 @@ export function simulatePipeline(instructions: string[]): PipelineState[] | neve
           alu_mem: false
         };
         excomponents = {
-          alu: { alu_result: `Immediate: ${immediate}` }
+          alu: { alu_result: `Immediate: ${formatUpperImmediate(immediate)}` }
         };
       }
 
