@@ -1363,8 +1363,8 @@ export function simulatePipeline(instructions: string[]): PipelineState[] | neve
       executeStarts.push(execute);
       writers.push(
         instructionTypeMap[command] === CommandType.RType
-        || instructionTypeMap[command] === CommandType.UType
-        || (instructionTypeMap[command] === CommandType.IType && (command === 'li' || !command.startsWith('l')))
+          || instructionTypeMap[command] === CommandType.UType
+          || (instructionTypeMap[command] === CommandType.IType && (command === 'li' || !command.startsWith('l')))
           ? destination
           : undefined,
       );
@@ -1494,13 +1494,23 @@ export function simulatePipeline(instructions: string[]): PipelineState[] | neve
       let excomponents: EXComponents | undefined = undefined;
       let memcomponents: MEMComponents | undefined = undefined;
 
-      if (ifInstruction) {
+      if (ifInstruction && ifCommandType === CommandType.BType) {
         ifpath = {
           branch_taken: false,
           mux_pc: true,
           pc_increment: true,
           pc_default: true,
           pc_id: true,
+          pc_im: true,
+          im_id: true
+        };
+      } else if (ifInstruction) {
+        ifpath = {
+          branch_taken: false,
+          mux_pc: true,
+          pc_increment: true,
+          pc_default: true,
+          pc_id: false,
           pc_im: true,
           im_id: true
         };
@@ -1650,7 +1660,7 @@ export function simulatePipeline(instructions: string[]): PipelineState[] | neve
         }
         idpath = {
           id_reg1: true,
-          id_ex: true,
+          id_ex: false,
           id_reg2: true,
           id_reg_write: true,
           id_imm_gen: false,
@@ -1758,7 +1768,7 @@ export function simulatePipeline(instructions: string[]): PipelineState[] | neve
           id_reg_write: true,
           id_imm_gen: true,
           imm_ex: true,
-          id_ex: true,
+          id_ex: false,
           reg1_ex: true,
           reg2_ex: false
         };
@@ -1856,7 +1866,7 @@ export function simulatePipeline(instructions: string[]): PipelineState[] | neve
           id_reg_write: true,
           id_imm_gen: true,
           imm_ex: true,
-          id_ex: true,
+          id_ex: false,
           reg1_ex: false,
           reg2_ex: false
         };
@@ -1980,7 +1990,7 @@ export function simulatePipeline(instructions: string[]): PipelineState[] | neve
           reg1_alu: true,
           reg2_mux: true,
           ex_shift: true,
-          zero_mem: false,
+          zero_mem: true,
           alu_mem: false,
           reg2_mem: false,
           ex_mux: false,
@@ -2103,7 +2113,7 @@ export function simulatePipeline(instructions: string[]): PipelineState[] | neve
 
       if (memCommandType === CommandType.BType && memCommand && memInstruction) {
         mempath = {
-          zero_mem2: false,
+          zero_mem2: true,
           alu_dm: false,
           reg2_dm: false,
           dm_wb: false,

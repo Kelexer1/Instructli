@@ -82,8 +82,8 @@ export default function SandboxModule() {
     [justExecutedAddress, nextAddress, registers],
   );
   const pipelineResults = useMemo(
-    () => createSandboxPipelineSnapshot(instructions),
-    [instructions],
+    () => createSandboxPipelineSnapshot(instructions, branchTargets),
+    [instructions, branchTargets],
   );
   const instructionAddresses = useMemo(
     () => Object.fromEntries(instructions.map((instruction) => [
@@ -395,7 +395,7 @@ export default function SandboxModule() {
               disabled={busy || (cpuMode === 'pipeline' ? pipelineResults.length === 0 : !loaded)}
               className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-3 py-1.5 text-sm text-gray-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <StepForward size={15} /> Step
+              <StepForward size={15} /> Cycle
             </button>
           </div>
         </div>

@@ -52,6 +52,7 @@ function getMatchingPreset(instructions: string[]) {
 
 export function createSandboxPipelineSnapshot(
   instructions: readonly DisassemblyInstruction[],
+  branchTargets: Readonly<Record<string, number>> = {},
 ): PipelineState[] {
   const supportedInstructions = getSupportedInstructions(instructions);
   if (supportedInstructions.length === 0) return [];
@@ -96,33 +97,63 @@ export function createSandboxPipelineSnapshot(
 
   const baseline = simulatePipeline(supportedInstructions);
   const normalized = supportedInstructions;
-  const fetchStarts = normalized.map((_, index) => index + 1);
-  const executeStarts = normalized.map((_, index) => index + 3);
   const writers = normalized.map((instruction) => getWrittenRegister(instruction));
+  const fetchStarts: number[] = [];
+  const idStarts: number[] = [];
+  const executeStarts: number[] = [];
 
-  for (let index = 1; index < normalized.length; index += 1) {
+  for (let index = 0; index < normalized.length; index += 1) {
+    const fetchStart = index === 0
+      ? 1
+      : Math.max(index + 1, idStarts[index - 1]);
+    const idStart = Math.max(fetchStart + 1, executeStarts[index - 1] ?? 0);
     const reads = getReadRegisters(normalized[index]);
-    const dependencies = writers
+    const dependencyExecuteStart = writers
       .slice(0, index)
-      .map((register, producerIndex) => register && reads.has(register) ? producerIndex : -1)
-      .filter((producerIndex) => producerIndex >= 0);
-    const latestProducer = dependencies.length > 0 ? Math.max(...dependencies) : -1;
-    if (latestProducer >= 0) {
-      executeStarts[index] = Math.max(executeStarts[index], executeStarts[latestProducer] + 3);
-    }
+      .reduce((latestExecuteStart, register, producerIndex) => {
+        if (!register || !reads.has(register)) return latestExecuteStart;
+        return Math.max(latestExecuteStart, executeStarts[producerIndex] + 3);
+      }, idStart + 1);
+    const executeStart = dependencyExecuteStart;
 
-    fetchStarts[index] = Math.max(fetchStarts[index], fetchStarts[index - 1] + 1);
+    fetchStarts.push(fetchStart);
+    idStarts.push(idStart);
+    executeStarts.push(executeStart);
   }
 
   const branchIndex = normalized.findIndex((instruction) => isBranch(instruction));
   const branchOutcome = branchIndex >= 0 ? getKnownBranchOutcome(normalized[branchIndex]) : null;
-  const lastVisibleInstruction = branchIndex >= 0 && branchOutcome === true
-    ? branchIndex
-    : normalized.length - 1;
+  const instructionAddresses = new Map(
+    instructions.map((instruction) => [normalizeInstruction(instruction.text), instruction.address]),
+  );
+  const branchTargetAddress = branchIndex >= 0
+    ? branchTargets[normalized[branchIndex]]
+    : undefined;
+  const branchTargetIndex = branchTargetAddress === undefined
+    ? -1
+    : normalized.findIndex((instruction) => instructionAddresses.get(instruction) === branchTargetAddress);
+  const hasResolvedTakenBranch = branchOutcome === true && branchTargetIndex > branchIndex;
+  const lastVisibleInstruction = normalized.length - 1;
+  const redirectFetchStarts = [...fetchStarts];
+  const redirectIdStarts = [...idStarts];
+  const redirectExecuteStarts = [...executeStarts];
+
+  if (hasResolvedTakenBranch) {
+    redirectFetchStarts[branchTargetIndex] = executeStarts[branchIndex] + 2;
+    redirectIdStarts[branchTargetIndex] = redirectFetchStarts[branchTargetIndex] + 1;
+    redirectExecuteStarts[branchTargetIndex] = redirectIdStarts[branchTargetIndex] + 1;
+    for (let index = branchTargetIndex + 1; index < normalized.length; index += 1) {
+      redirectFetchStarts[index] = redirectFetchStarts[index - 1] + 1;
+      redirectIdStarts[index] = redirectFetchStarts[index] + 1;
+      redirectExecuteStarts[index] = redirectIdStarts[index] + 1;
+    }
+  }
+
   const endCycle = Math.max(
-    ...executeStarts.slice(0, lastVisibleInstruction + 1).map((start) => start + 3),
+    ...redirectExecuteStarts.slice(0, lastVisibleInstruction + 1).map((start) => start + 3),
     normalized.length + 5,
   );
+  const flushCycle = hasResolvedTakenBranch ? executeStarts[branchIndex] + 1 : -1;
   const templates = new Map<string, PipelineState>();
   for (const state of baseline) {
     for (const stage of PIPELINE_STAGES) {
@@ -141,10 +172,17 @@ export function createSandboxPipelineSnapshot(
     const hazards: string[] = [];
 
     normalized.slice(0, lastVisibleInstruction + 1).forEach((instruction, index) => {
-      const fetch = fetchStarts[index];
-      const execute = executeStarts[index];
-      if (branchIndex >= 0 && branchOutcome === true
-        && index > branchIndex && cycle >= executeStarts[branchIndex]) return;
+      const isRedirected = hasResolvedTakenBranch
+        && index >= branchTargetIndex
+        && cycle >= flushCycle + 1;
+      const isSpeculative = hasResolvedTakenBranch
+        && index > branchIndex
+        && cycle >= flushCycle
+        && !isRedirected;
+      if (isSpeculative) return;
+      const fetch = isRedirected ? redirectFetchStarts[index] : fetchStarts[index];
+      const id = isRedirected ? redirectIdStarts[index] : idStarts[index];
+      const execute = isRedirected ? redirectExecuteStarts[index] : executeStarts[index];
       const visible = (stage: 'IF' | 'ID' | 'EX' | 'MEM' | 'WB', start: number) => {
         if (cycle !== start) return;
         stages[stage] = supportedInstructions[index];
@@ -173,36 +211,69 @@ export function createSandboxPipelineSnapshot(
         }
       };
 
-      visible('IF', fetch);
-      if (cycle >= fetch + 1 && cycle < execute) {
-        visible('ID', cycle);
-      }
+      if (cycle >= fetch && cycle < id) visible('IF', cycle);
+      if (cycle >= id && cycle < execute) visible('ID', cycle);
       visible('EX', execute);
       visible('MEM', execute + 1);
       visible('WB', execute + 2);
-      if (
-        cycle >= fetch + 1
-        && cycle < execute
-        && execute > fetch + 2
-        && !stages.EX
-      ) {
-        stages.EX = 'bubble';
-      }
     });
 
-    const dataHazard = normalized.some((instruction, index) =>
-      index > 0
-      && cycle >= fetchStarts[index] + 1
-      && cycle < executeStarts[index]
-      && executeStarts[index] > index + 3
-      && writers.slice(0, index).some((writer) => writer !== null && getReadRegisters(instruction).has(writer)),
-    );
+    const stalledInstructions = normalized.flatMap((instruction, index) => {
+      if (index === 0 || cycle < idStarts[index] || cycle >= executeStarts[index]) {
+        return [];
+      }
+
+      const reads = getReadRegisters(instruction);
+      return writers.slice(0, index).flatMap((writer, producerIndex) =>
+        writer !== null
+        && reads.has(writer)
+        && executeStarts[index] > idStarts[index] + 1
+        && cycle < executeStarts[producerIndex] + 3
+          ? [{ producerIndex }]
+          : [],
+      );
+    });
+    if (stalledInstructions.length > 0) {
+      if (!stages.EX) stages.EX = 'bubble';
+      const producerInWB = stalledInstructions.some(({ producerIndex }) =>
+        cycle >= executeStarts[producerIndex] + 2,
+      );
+      if (producerInWB && !stages.MEM) stages.MEM = 'bubble';
+    }
+
+    if (hasResolvedTakenBranch && cycle >= flushCycle) {
+      const bubbleProgressions = [
+        { startStage: 'IF' as const, instruction: 'bubble(flush)' },
+        { startStage: 'ID' as const, instruction: 'bubble(flush)' },
+        { startStage: 'EX' as const, instruction: 'bubble(flush)' },
+      ];
+      bubbleProgressions.forEach(({ startStage, instruction }) => {
+        const startOffset = PIPELINE_STAGES.indexOf(startStage);
+        const currentStage = PIPELINE_STAGES[startOffset + cycle - flushCycle];
+        if (currentStage) stages[currentStage] = instruction;
+      });
+    }
+
+    const dataHazard = normalized.some((instruction, index) => {
+      if (index === 0 || cycle < idStarts[index] || cycle >= executeStarts[index]) {
+        return false;
+      }
+
+      const reads = getReadRegisters(instruction);
+      return writers.slice(0, index).some((writer, producerIndex) =>
+        writer !== null
+        && reads.has(writer)
+        && cycle < executeStarts[producerIndex] + 3,
+      );
+    });
     if (dataHazard) hazards.push('Data hazard: dependent instruction is held in ID until the producer reaches WB. An EX bubble is inserted.');
 
-    if (branchIndex >= 0 && cycle === executeStarts[branchIndex]) {
+    if (branchIndex >= 0 && cycle === executeStarts[branchIndex] + 1) {
       hazards.push(branchOutcome === false
         ? `Control hazard: ${supportedInstructions[branchIndex]} is not taken. The sequential instructions continue through the pipeline.`
-        : `Control hazard: ${supportedInstructions[branchIndex]} changes control flow. Younger instructions are flushed.`);
+        : branchOutcome === true
+          ? `Control hazard: ${supportedInstructions[branchIndex]} is taken in MEM. The younger instructions in ID and EX are flushed.`
+          : `Control hazard: ${supportedInstructions[branchIndex]} has an unresolved outcome.`);
     }
 
     return {
