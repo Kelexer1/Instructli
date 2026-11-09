@@ -8,6 +8,7 @@ import type { SandboxCpuData } from "../../src/utils/sandbox-cpu-data";
 import {
   BRANCH_INSTRUCTIONS,
   IMMEDIATE_INSTRUCTIONS,
+  PIPELINE_STAGES,
   isConditionalBranch,
   isStoreInstruction,
   isUpperImmediateInstruction,
@@ -30,9 +31,9 @@ type PipelineProcessorProps = {
   currCycle: number;
   currentPreset: { index: number; note: string } | null;
   cpuData?: SandboxCpuData;
-  instructionAddresses?: Record<string, number>;
-  branchTargets?: Record<string, number>;
 };
+
+type StageSlots = NonNullable<PipelineState["slots"]>;
 
 const defaultIFPath: IFPath = {
   branch_taken: false, mux_pc: false, pc_increment: false,
@@ -77,14 +78,6 @@ function instructionKey(instruction: string) {
 
 function instructionParts(instruction: string) {
   return instructionKey(instruction).split(" ");
-}
-
-function mappedAddress(
-  map: Record<string, number> | undefined,
-  instruction: string | undefined,
-) {
-  if (!map || !instruction) return undefined;
-  return map[instruction] ?? map[instructionKey(instruction)];
 }
 
 function registerOperands(instruction: string) {
@@ -164,37 +157,41 @@ function buildHoverText(
   ifComp: IFComponents, idComp: IDComponents, exComp: EXComponents, memComp: MEMComponents,
   stageLabels: { IF?: string; ID?: string; EX?: string; MEM?: string; WB?: string },
   hazards: string[], pcValue: number | null, registers?: readonly number[],
-  instructionAddresses?: Record<string, number>, branchTargets?: Record<string, number>,
+  slots?: StageSlots,
 ): string | null {
   const instruction = stageLabels.IF || stageLabels.ID || stageLabels.EX || stageLabels.MEM || stageLabels.WB;
   const idInstruction = stageLabels.ID;
   const exInstruction = stageLabels.EX;
   const memInstruction = stageLabels.MEM;
   const wbInstruction = stageLabels.WB;
-  const branchInstruction = [exInstruction, memInstruction]
-    .find((candidate) => candidate && isConditionalBranch(registerOperands(candidate).mnemonic));
+  const branchStage = (["EX", "MEM"] as const).find((stage) => {
+    const candidate = stageLabels[stage];
+    return candidate && isConditionalBranch(registerOperands(candidate).mnemonic);
+  });
+  const branchInstruction = branchStage ? stageLabels[branchStage] : undefined;
+  const branchSlot = branchStage ? slots?.[branchStage] : undefined;
   const branchParts = branchInstruction ? registerOperands(branchInstruction) : null;
   const idParts = idInstruction ? registerOperands(idInstruction) : null;
   const exParts = exInstruction ? registerOperands(exInstruction) : null;
   const wbParts = wbInstruction ? registerOperands(wbInstruction) : null;
-  const branchTargetAddress = mappedAddress(branchTargets, branchInstruction);
   const resolvedImmediate = branchParts
-    ? branchTargetAddress !== undefined
-      ? String(branchTargetAddress - (mappedAddress(instructionAddresses, branchInstruction) ?? 0))
+    ? branchSlot?.target !== undefined
+      ? String(branchSlot.target - branchSlot.address)
       : branchParts.immediate
     : '';
+  const firstStage = PIPELINE_STAGES.find((stage) => stageLabels[stage]);
   const instructionAddress = instruction
-    ? mappedAddress(instructionAddresses, instruction) ?? pcValue
+    ? (firstStage ? slots?.[firstStage]?.address : undefined) ?? pcValue
     : null;
   const branchInstructionAddress = branchInstruction
-    ? mappedAddress(instructionAddresses, branchInstruction) ?? pcValue
+    ? branchSlot?.address ?? pcValue
     : null;
   const branchValue = branchParts && branchInstructionAddress !== null
     && branchInstructionAddress !== undefined && Number.isFinite(Number(resolvedImmediate))
     ? `${formatHex(branchInstructionAddress)} + ${formatImmediate(resolvedImmediate)} = ${formatHex(branchInstructionAddress + Number(resolvedImmediate))}`
     : exComp.branch_adder?.value;
   const branchWasTaken = branchParts && branchInstructionAddress !== null
-    ? branchTaken(branchParts.mnemonic, branchParts.rs1, branchParts.rs2, registers)
+    ? branchSlot?.taken ?? branchTaken(branchParts.mnemonic, branchParts.rs1, branchParts.rs2, registers)
     : false;
   const pcInstruction = stageLabels.IF || branchInstruction || instruction;
   const pcAddress = stageLabels.IF
@@ -245,11 +242,7 @@ function buildHoverText(
     immediateGenerator: idParts ? {
       value: idComp.imm_gen?.value
         || (usesImmediateInstruction(idParts.mnemonic)
-          ? `Immediate: ${formatImmediate(
-            mappedAddress(branchTargets, idInstruction) !== undefined
-              ? String((mappedAddress(branchTargets, idInstruction) ?? 0) - (mappedAddress(instructionAddresses, idInstruction) ?? 0))
-              : idParts.immediate,
-          )}`
+          ? `Immediate: ${formatImmediate(idParts.immediate)}`
           : undefined),
       usesImmediate: Boolean(idComp.imm_gen?.value) || usesImmediateInstruction(idParts.mnemonic),
     } : undefined,
@@ -290,7 +283,7 @@ function buildHoverText(
 }
 
 export default function PipelineProcessor({
-  results, currCycle, currentPreset, cpuData, instructionAddresses, branchTargets,
+  results, currCycle, currentPreset, cpuData,
 }: PipelineProcessorProps) {
   const [activeBlock, setActiveBlock] = useState<string | null>(null);
   const arrowColour = "#ff0000";
@@ -312,21 +305,14 @@ export default function PipelineProcessor({
   const memComp = latestResult?.component?.MEM ?? defaultMEMComponents;
 
   const stageLabels = latestResult?.stages ?? {};
+  const hoverLabels = Object.fromEntries(
+    Object.entries(stageLabels).filter(([, label]) => label && !label.startsWith("bubble")),
+  ) as typeof stageLabels;
   const hazards = latestResult?.hazards ?? [];
-  const fetchCycle = stageLabels.IF
-    ? results.findIndex((result) => result.stages.IF === stageLabels.IF)
-    : -1;
-  const pcValue = fetchCycle >= 0 ? fetchCycle * 4 : null;
-  const branchInstruction = stageLabels.MEM;
-  const branchParts = branchInstruction ? registerOperands(branchInstruction) : null;
-  const branchIsTaken = branchParts && isConditionalBranch(branchParts.mnemonic)
-    ? branchTaken(branchParts.mnemonic, branchParts.rs1, branchParts.rs2, registers)
-    : false;
-  const displayIFPath: IFPath = branchIsTaken
-    ? { ...ifPath, branch_taken: true, pc_default: false, pc_increment: false }
-    : ifPath;
+  const slots = latestResult?.slots;
+  const pcValue = slots?.IF?.address ?? null;
 
-  const getIFColour = (key: keyof IFPath) => displayIFPath[key] ? arrowColour : "#000000";
+  const getIFColour = (key: keyof IFPath) => ifPath[key] ? arrowColour : "#000000";
   const getIDColour = (key: keyof IDPath) => idPath[key] ? arrowColour : "#000000";
   const getEXColour = (key: keyof EXPath) => exPath[key] ? arrowColour : "#000000";
   const getMEMColour = (key: keyof MEMPath) => memPath[key] ? arrowColour : "#000000";
@@ -336,7 +322,7 @@ export default function PipelineProcessor({
     activeBlock,
     exPath,
     ifComp, idComp, exComp, memComp,
-    stageLabels, hazards, pcValue, registers, instructionAddresses, branchTargets,
+    hoverLabels, hazards, pcValue, registers, slots,
   );
 
   const hoverContent = tooltipText

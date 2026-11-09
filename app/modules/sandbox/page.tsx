@@ -12,7 +12,8 @@ import MemoryPane from '@/components/sandbox/MemoryPane';
 import SingleProcessor from '@/components/sandbox/SandboxSingleCycle';
 import PipelineProcessor from '@/components/sandbox/SandboxPipelineProcessor';
 import { createSandboxSingleCycleSnapshot } from '@/src/utils/sandbox-single-cycle';
-import { createSandboxPipelineSnapshot } from '@/src/utils/sandbox-pipeline';
+import { PipelineBlockedError, PipelineEngine, type PipelineEnv, type PipelineSlot } from '@/src/utils/sandbox-pipeline-engine';
+import type { PipelineState } from '@/src/utils/pipeline-types';
 import { createSandboxCpuData } from '@/src/utils/sandbox-cpu-data';
 import type { SandboxCpuData } from '@/src/utils/sandbox-cpu-data';
 import type { JsonResponse } from '@/src/utils/single-processor';
@@ -26,6 +27,8 @@ import {
   addWasmBreakpoint,
   removeWasmBreakpoint,
   readWasmLastExecutedAddress,
+  readWasmLastRaw,
+  readWasmInstructionAt,
   readWasmSymbolAddress,
   readWasmLastWrittenRegister,
   readWasmExitCode,
@@ -42,6 +45,7 @@ import {
   WASM_STOP_BREAKPOINT,
   WASM_STOP_EBREAK,
   WASM_STOP_EXITED,
+  WASM_STOP_WAITING_INPUT,
   type WasmRegister,
   type WasmOutput,
   type DisassemblyInstruction,
@@ -55,7 +59,6 @@ export default function SandboxModule() {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [instructions, setInstructions] = useState<DisassemblyInstruction[]>([]);
-  const [branchTargets, setBranchTargets] = useState<Record<string, number>>({});
   const [justExecutedAddress, setJustExecutedAddress] = useState<number | null>(null);
   const [nextAddress, setNextAddress] = useState<number | null>(null);
   const [breakpointAddresses, setBreakpointAddresses] = useState<ReadonlySet<number>>(new Set());
@@ -65,7 +68,10 @@ export default function SandboxModule() {
   );
   const [changedRegisters, setChangedRegisters] = useState<ReadonlySet<number>>(new Set());
   const [singleCycleSnapshot, setSingleCycleSnapshot] = useState<JsonResponse | null>(null);
-  const [pipelineCycle, setPipelineCycle] = useState(-1);
+  const [pipelineResults, setPipelineResults] = useState<PipelineState[]>([]);
+  const pipelineEngineRef = useRef<PipelineEngine | null>(null);
+  const pipelineSteppingRef = useRef(false);
+  const pipelineCycle = pipelineResults.length - 1;
   const [activeToolTab, setActiveToolTab] = useState('terminal');
   const [cpuMode, setCpuMode] = useState<'single-cycle' | 'pipeline'>('single-cycle');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -81,17 +87,10 @@ export default function SandboxModule() {
     ),
     [justExecutedAddress, nextAddress, registers],
   );
-  const pipelineResults = useMemo(
-    () => createSandboxPipelineSnapshot(instructions, branchTargets),
-    [instructions, branchTargets],
-  );
-  const instructionAddresses = useMemo(
-    () => Object.fromEntries(instructions.map((instruction) => [
-      instruction.text.replace(/,/g, ' ').trim().replace(/\s+/g, ' '),
-      instruction.address,
-    ])),
-    [instructions],
-  );
+  function resetPipeline() {
+    pipelineEngineRef.current = null;
+    setPipelineResults([]);
+  }
 
   useEffect(() => {
     recordAnalyticsVisit('sandbox');
@@ -102,40 +101,99 @@ export default function SandboxModule() {
     setAssemblyState((current) => (current === 'none' ? 'none' : 'outdated'));
     setLoaded(false);
     setInstructions([]);
-    setBranchTargets({});
     setJustExecutedAddress(null);
     setNextAddress(null);
     setChangedRegisters(new Set());
     setSingleCycleSnapshot(null);
-    setPipelineCycle(-1);
+    resetPipeline();
     setStatus(null);
   }
 
+  async function refreshDisassembly() {
+    const debugState = await readWasmDebugState(source);
+    setInstructions((current) => (
+      current.length === debugState.instructions.length
+        && current.every((item, index) => item.text === debugState.instructions[index].text)
+        ? current
+        : debugState.instructions
+    ));
+  }
+
   async function handlePipelineStep() {
-    if (pipelineResults.length === 0) {
+    if (pipelineSteppingRef.current) return;
+    pipelineSteppingRef.current = true;
+    try {
+      await advancePipeline();
+    } finally {
+      pipelineSteppingRef.current = false;
+    }
+  }
+
+  async function advancePipeline() {
+    if (!loaded || instructions.length === 0) {
       setStatus('Assemble and load a program with supported instructions first.');
       return;
     }
 
-    const nextCycle = pipelineCycle + 1;
-    if (nextCycle >= pipelineResults.length) {
+    const engine = pipelineEngineRef.current ?? new PipelineEngine(await readWasmProgramCounter());
+    pipelineEngineRef.current = engine;
+    if (engine.finished) {
       setStatus('The pipeline has completed. Load the program again to restart it.');
       return;
     }
 
-    const writeBackInstruction = pipelineResults[nextCycle]?.stages.WB;
-    if (writeBackInstruction && !writeBackInstruction.includes('bubble')) {
-      const instruction = instructions.find(
-        (candidate) => candidate.text.replace(/,/g, ' ').trim().replace(/\s+/g, ' ')
-          === writeBackInstruction.replace(/,/g, ' ').trim().replace(/\s+/g, ' '),
-      );
-      if (instruction) {
-        await handleExecution(stepWasm);
-      }
-    }
+    let waitingForInput = false;
+    const env: PipelineEnv = {
+      fetch: readWasmInstructionAt,
+      readRegisters: async () => (await readWasmRegisters()).map((register) => register.value),
+      retire: async (slot: PipelineSlot) => {
+        const outcome = await handleExecution(stepWasm);
+        if (!outcome || outcome.stopReason === WASM_STOP_WAITING_INPUT) {
+          waitingForInput = outcome?.stopReason === WASM_STOP_WAITING_INPUT;
+          return {
+            address: slot.address,
+            raw: slot.raw,
+            nextPc: slot.address,
+            halted: false,
+            blocked: true,
+            message: 'The emulator stopped on this instruction. Enter input in the terminal, then step again.',
+          };
+        }
+        if (slot.decoded.kind === 'store') await refreshDisassembly();
+        return {
+          address: outcome.executedAddress,
+          raw: await readWasmLastRaw(),
+          nextPc: outcome.currentAddress,
+          halted: outcome.stopReason === WASM_STOP_EXITED,
+          message: outcome.stopReason === WASM_STOP_EXITED ? 'The program exited.' : undefined,
+        };
+      },
+    };
 
-    setPipelineCycle(nextCycle);
-    setStatus(`Advanced the pipelined processor to cycle ${nextCycle + 1}.`);
+    try {
+      await engine.step(env);
+      setPipelineResults([...engine.history]);
+      setStatus(`Advanced the pipelined processor to cycle ${engine.history.length}.`);
+    } catch (error) {
+      if (error instanceof PipelineBlockedError) {
+        setStatus(waitingForInput
+          ? 'The program is waiting for input. Enter it in the terminal, then step again.'
+          : error.message);
+        return;
+      }
+      setStatus(error instanceof Error ? error.message : 'The pipeline could not advance.');
+    }
+  }
+
+  async function handleMemoryWrite(address: number, size: number, value: number) {
+    await writeWasmMemory(address, size, value);
+    await refreshDisassembly();
+    const updated = pipelineEngineRef.current?.invalidate(
+      address,
+      size,
+      `Code at 0x${(address >>> 0).toString(16)} was edited in memory. Stale in-flight copies were flushed and fetching restarts there.`,
+    );
+    if (updated && pipelineEngineRef.current) setPipelineResults([...pipelineEngineRef.current.history]);
   }
 
   function handleToolTabChange(tabId: string) {
@@ -156,19 +214,6 @@ export default function SandboxModule() {
     if (output.length > 0) setTerminalOutput((current) => [...current, ...output]);
   }
 
-  async function resolvePipelineBranchTargets(nextInstructions: DisassemblyInstruction[]) {
-    const targets: Record<string, number> = {};
-    for (const instruction of nextInstructions) {
-      const tokens = instruction.text.replace(/,/g, ' ').trim().split(/\s+/);
-      if (!['beq', 'bne', 'blt', 'bge', 'bltu', 'bgeu'].includes(tokens[0]?.toLowerCase() ?? '')) continue;
-      const target = await readWasmSymbolAddress(tokens[3] ?? '');
-      if (target !== null) {
-        targets[instruction.text.replace(/,/g, ' ').trim().replace(/\s+/g, ' ')] = target;
-      }
-    }
-    return targets;
-  }
-
   async function handleAssemble() {
     setBusy(true);
     setStatus(null);
@@ -179,13 +224,12 @@ export default function SandboxModule() {
       const debugState = await readWasmDebugState(source);
       const nextRegisters = await readWasmRegisters();
       setInstructions(debugState.instructions);
-      setBranchTargets(await resolvePipelineBranchTargets(debugState.instructions));
       setRegisters(nextRegisters);
       setChangedRegisters(new Set());
       setJustExecutedAddress(null);
       setNextAddress(debugState.currentAddress);
       setSingleCycleSnapshot(null);
-      setPipelineCycle(-1);
+      resetPipeline();
       setBreakpointAddresses(new Set());
       setAssemblyState('current');
       setLoaded(false);
@@ -209,13 +253,12 @@ export default function SandboxModule() {
       const debugState = await readWasmDebugState(source);
       const nextRegisters = await readWasmRegisters();
       setInstructions(debugState.instructions);
-      setBranchTargets(await resolvePipelineBranchTargets(debugState.instructions));
       setRegisters(nextRegisters);
       setChangedRegisters(new Set());
       setJustExecutedAddress(null);
       setNextAddress(debugState.currentAddress);
       setSingleCycleSnapshot(null);
-      setPipelineCycle(-1);
+      resetPipeline();
       setLoaded(true);
       setStatus('Program loaded. Ready to run.');
     } catch (error) {
@@ -254,6 +297,11 @@ export default function SandboxModule() {
       await provideWasmInput(input);
       setTerminalOutput((current) => [...current, { stream: 'stdin', text: `${input}\n` }]);
       await resumeWasm();
+      if (cpuMode === 'pipeline') {
+        setStatus('Input received. Step the pipeline to continue.');
+        setBusy(false);
+        return;
+      }
       await handleExecution(runWasm);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Input could not be sent to the emulator.');
@@ -261,7 +309,7 @@ export default function SandboxModule() {
     }
   }
 
-  async function handleExecution(action: () => Promise<number>) {
+  async function handleExecution(action: () => Promise<number>): Promise<{ stopReason: number; executedAddress: number; currentAddress: number } | null> {
     setBusy(true);
     setStatus(null);
     try {
@@ -317,8 +365,10 @@ export default function SandboxModule() {
       } else {
         setStatus('Execution stopped.');
       }
+      return { stopReason, executedAddress, currentAddress };
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'The emulator could not execute the program.');
+      return null;
     } finally {
       setBusy(false);
     }
@@ -388,11 +438,11 @@ export default function SandboxModule() {
               <RotateCcw size={15} /> Assemble
             </button>
             <button type="button" onClick={handleLoad} disabled={busy || assemblyState !== 'current'} className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-3 py-1.5 text-sm text-gray-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Load</button>
-            <button type="button" onClick={() => handleExecution(runWasm)} disabled={busy || !loaded} className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-3 py-1.5 text-sm text-gray-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"><Play size={15} /> Run</button>
+            <button type="button" onClick={() => { resetPipeline(); void handleExecution(runWasm); }} disabled={busy || !loaded} className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-3 py-1.5 text-sm text-gray-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"><Play size={15} /> Run</button>
             <button
               type="button"
               onClick={cpuMode === 'pipeline' ? () => void handlePipelineStep() : () => void handleExecution(stepWasm)}
-              disabled={busy || (cpuMode === 'pipeline' ? pipelineResults.length === 0 : !loaded)}
+              disabled={busy || !loaded}
               className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-3 py-1.5 text-sm text-gray-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <StepForward size={15} /> Cycle
@@ -484,7 +534,7 @@ export default function SandboxModule() {
                     <MemoryPane
                       loaded={loaded}
                       readValue={cpuData.readMemory}
-                      writeValue={cpuData.writeMemory}
+                      writeValue={handleMemoryWrite}
                       onError={setStatus}
                     />
                   ),
@@ -539,8 +589,6 @@ export default function SandboxModule() {
                             currCycle={pipelineCycle}
                             currentPreset={null}
                             cpuData={cpuData}
-                            instructionAddresses={instructionAddresses}
-                            branchTargets={branchTargets}
                           />
                         ) : (() => {
                           const instruction = singleCycleSnapshot?.block_data.instruction_mem.value ?? null;

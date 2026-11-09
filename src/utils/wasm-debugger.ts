@@ -38,6 +38,7 @@ export interface WasmRegister {
 export const WASM_STOP_BREAKPOINT = 0;
 export const WASM_STOP_EBREAK = 2;
 export const WASM_STOP_EXITED = 3;
+export const WASM_STOP_WAITING_INPUT = 4;
 
 function loadModule(): Promise<WasmModule> {
   if (modulePromise) return modulePromise;
@@ -178,6 +179,33 @@ export async function readWasmProgramCounter(): Promise<number> {
   const wasm = await loadModule();
   if (!activeSession) throw new Error('Load the program before reading execution state.');
   return wasm.ccall('wasm_pc', 'number', ['number'], [activeSession]);
+}
+
+export async function readWasmInstructionAt(address: number): Promise<{ raw: number; text: string } | null> {
+  const wasm = await loadModule();
+  if (!activeSession) throw new Error('Assemble the program before fetching instructions.');
+  const readable = wasm.ccall('wasm_memory_readable', 'number', ['number', 'number', 'number'], [
+    activeSession,
+    address >>> 0,
+    4,
+  ]);
+  if (!readable) return null;
+
+  const pointer = wasm.ccall('wasm_disas_at', 'number', ['number', 'number'], [activeSession, address >>> 0]);
+  if (!pointer) return null;
+  try {
+    const text = wasm.UTF8ToString(pointer);
+    const raw = wasm.ccall('wasm_read_u32_value', 'number', ['number', 'number'], [activeSession, address >>> 0]) >>> 0;
+    return { raw, text };
+  } finally {
+    wasm._free(pointer);
+  }
+}
+
+export async function readWasmLastRaw(): Promise<number> {
+  const wasm = await loadModule();
+  if (!activeSession) throw new Error('Load the program before reading execution state.');
+  return wasm.ccall('wasm_last_raw', 'number', ['number'], [activeSession]) >>> 0;
 }
 
 export async function readWasmLastExecutedAddress(): Promise<number> {

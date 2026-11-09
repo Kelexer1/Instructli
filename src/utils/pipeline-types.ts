@@ -197,7 +197,10 @@ type PipelineState = {
   component ?: {
     [stage in PipelineStage]?: StageComponents[stage];
   };
-  hazards: string[]
+  hazards: string[];
+  slots?: {
+    [stage in PipelineStage]?: { address: number; target?: number; taken?: boolean };
+  };
 };
 
 export type { PipelineState };
