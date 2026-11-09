@@ -71,8 +71,20 @@ const defaultMEMComponents: MEMComponents = {
   data_memory: { read_data: "", write_data: "" },
 };
 
+function instructionKey(instruction: string) {
+  return instruction.replace(/,/g, " ").trim().replace(/\s+/g, " ");
+}
+
 function instructionParts(instruction: string) {
-  return instruction.replace(/,/g, " ").trim().split(/\s+/);
+  return instructionKey(instruction).split(" ");
+}
+
+function mappedAddress(
+  map: Record<string, number> | undefined,
+  instruction: string | undefined,
+) {
+  if (!map || !instruction) return undefined;
+  return map[instruction] ?? map[instructionKey(instruction)];
 }
 
 function registerOperands(instruction: string) {
@@ -165,16 +177,17 @@ function buildHoverText(
   const idParts = idInstruction ? registerOperands(idInstruction) : null;
   const exParts = exInstruction ? registerOperands(exInstruction) : null;
   const wbParts = wbInstruction ? registerOperands(wbInstruction) : null;
+  const branchTargetAddress = mappedAddress(branchTargets, branchInstruction);
   const resolvedImmediate = branchParts
-    ? branchTargets?.[branchInstruction!] !== undefined
-      ? String(branchTargets[branchInstruction!] - (instructionAddresses?.[branchInstruction!] ?? 0))
+    ? branchTargetAddress !== undefined
+      ? String(branchTargetAddress - (mappedAddress(instructionAddresses, branchInstruction) ?? 0))
       : branchParts.immediate
     : '';
   const instructionAddress = instruction
-    ? instructionAddresses?.[instruction] ?? pcValue
+    ? mappedAddress(instructionAddresses, instruction) ?? pcValue
     : null;
   const branchInstructionAddress = branchInstruction
-    ? instructionAddresses?.[branchInstruction] ?? pcValue
+    ? mappedAddress(instructionAddresses, branchInstruction) ?? pcValue
     : null;
   const branchValue = branchParts && branchInstructionAddress !== null
     && branchInstructionAddress !== undefined && Number.isFinite(Number(resolvedImmediate))
@@ -233,8 +246,8 @@ function buildHoverText(
       value: idComp.imm_gen?.value
         || (usesImmediateInstruction(idParts.mnemonic)
           ? `Immediate: ${formatImmediate(
-            branchTargets?.[idInstruction!] !== undefined
-              ? String(branchTargets[idInstruction!] - (instructionAddresses?.[idInstruction!] ?? 0))
+            mappedAddress(branchTargets, idInstruction) !== undefined
+              ? String((mappedAddress(branchTargets, idInstruction) ?? 0) - (mappedAddress(instructionAddresses, idInstruction) ?? 0))
               : idParts.immediate,
           )}`
           : undefined),

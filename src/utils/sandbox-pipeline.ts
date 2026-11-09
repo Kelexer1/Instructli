@@ -12,15 +12,22 @@ function normalizeInstruction(text: string) {
   return text.replace(/,/g, ' ').trim().replace(/\s+/g, ' ');
 }
 
+function displayInstruction(text: string) {
+  return text.trim().replace(/\s+/g, ' ');
+}
+
 function isSupportedInstruction(instruction: string) {
   return instructionTypeMap[instruction.split(' ')[0]?.toLowerCase() ?? ''] !== undefined;
 }
 
 function getSupportedInstructions(instructions: readonly DisassemblyInstruction[]) {
   return instructions
-    .map((instruction) => normalizeInstruction(instruction.text))
-    .filter((instruction) => instruction.length > 0)
-    .filter(isSupportedInstruction);
+    .map((instruction) => ({
+      normalized: normalizeInstruction(instruction.text),
+      display: displayInstruction(instruction.text),
+    }))
+    .filter((instruction) => instruction.normalized.length > 0)
+    .filter((instruction) => isSupportedInstruction(instruction.normalized));
 }
 
 function getMatchingPreset(instructions: string[]) {
@@ -54,8 +61,10 @@ export function createSandboxPipelineSnapshot(
   instructions: readonly DisassemblyInstruction[],
   branchTargets: Readonly<Record<string, number>> = {},
 ): PipelineState[] {
-  const supportedInstructions = getSupportedInstructions(instructions);
-  if (supportedInstructions.length === 0) return [];
+  const parsedInstructions = getSupportedInstructions(instructions);
+  if (parsedInstructions.length === 0) return [];
+  const supportedInstructions = parsedInstructions.map((instruction) => instruction.normalized);
+  const displayInstructions = parsedInstructions.map((instruction) => instruction.display);
 
   const preset = getMatchingPreset(supportedInstructions);
   if (preset !== null) {
@@ -185,7 +194,7 @@ export function createSandboxPipelineSnapshot(
       const execute = isRedirected ? redirectExecuteStarts[index] : executeStarts[index];
       const visible = (stage: 'IF' | 'ID' | 'EX' | 'MEM' | 'WB', start: number) => {
         if (cycle !== start) return;
-        stages[stage] = supportedInstructions[index];
+        stages[stage] = displayInstructions[index];
         const template = templates.get(`${stage}:${instruction}`);
         if (!template) return;
         switch (stage) {
@@ -270,10 +279,10 @@ export function createSandboxPipelineSnapshot(
 
     if (branchIndex >= 0 && cycle === executeStarts[branchIndex] + 1) {
       hazards.push(branchOutcome === false
-        ? `Control hazard: ${supportedInstructions[branchIndex]} is not taken. The sequential instructions continue through the pipeline.`
+        ? `Control hazard: ${displayInstructions[branchIndex]} is not taken. The sequential instructions continue through the pipeline.`
         : branchOutcome === true
-          ? `Control hazard: ${supportedInstructions[branchIndex]} is taken in MEM. The younger instructions in ID and EX are flushed.`
-          : `Control hazard: ${supportedInstructions[branchIndex]} has an unresolved outcome.`);
+          ? `Control hazard: ${displayInstructions[branchIndex]} is taken in MEM. The younger instructions in ID and EX are flushed.`
+          : `Control hazard: ${displayInstructions[branchIndex]} has an unresolved outcome.`);
     }
 
     return {
