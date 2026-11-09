@@ -4,7 +4,7 @@ import {
   isBranchInstruction,
   isStoreInstruction,
 } from '@/src/data/sandbox-instructions';
-import { handlePipeLinePreset, simulatePipeline } from '@/src/utils/pipeline-processor';
+import { handlePipeLinePreset, simulatePipeline } from '@/src/utils/sandbox-pipeline-processor';
 import type { DisassemblyInstruction } from '@/src/utils/wasm-debugger';
 import type { PipelineState } from '@/src/utils/pipeline-types';
 

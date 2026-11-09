@@ -49,8 +49,6 @@ export default function PipelineDatapathSVG({
   onSegmentClickMEM,
   onSegmentClickWB,
 }: PipelineDatapathSVGProps) {
-  const [hoverHeight, setHoverHeight] = React.useState(160);
-  const hoverContentRef = React.useRef<HTMLDivElement>(null);
   const hover = (label: string) => onBlockHover?.(label);
   const unhover = () => onBlockHover?.(null);
 
@@ -74,41 +72,16 @@ export default function PipelineDatapathSVG({
     "div",
     {
       xmlns: "http://www.w3.org/1999/xhtml",
-      style: { fontSize: 12, whiteSpace: "pre-wrap", wordWrap: "break-word", color: "black", padding: "5px" },
+      style: { fontSize: 12, whiteSpace: "pre-wrap", wordWrap: "break-word", color: "black", height: "150px", overflow: "auto", padding: "5px", marginRight: "10px" },
     },
     analysisText ?? "Select a preset to see analysis"
   );
 
   const shouldShowHover = Boolean(hoverContent);
 
-  React.useLayoutEffect(() => {
-    if (!shouldShowHover || !hoverContentRef.current) return;
-
-    const updateHoverHeight = () => {
-      const content = hoverContentRef.current;
-      if (!content) return;
-
-      const contentHeight = Math.max(content.scrollHeight, content.getBoundingClientRect().height);
-      const nextHeight = Math.ceil(contentHeight + 20);
-      setHoverHeight((currentHeight) => currentHeight === nextHeight ? currentHeight : nextHeight);
-    };
-
-    updateHoverHeight();
-    const observer = new ResizeObserver(updateHoverHeight);
-    observer.observe(hoverContentRef.current);
-    return () => observer.disconnect();
-  }, [hoverContent, shouldShowHover]);
-
   return (
     <>
-      <svg
-        width="100%"
-        height="100%"
-        viewBox="-10 -10 1010 580"
-        fill="transparent"
-        preserveAspectRatio="xMidYMid meet"
-        style={{ overflow: "visible", position: "relative", zIndex: 10 }}
-      >
+      <svg width="100%" height="100%" viewBox="-10 -10 1010 580" fill="transparent" preserveAspectRatio="xMidYMid meet">
         {clickableStages && Object.entries({
           IF:  [-10, 259.758],
           ID:  [283.2967, 465.67],
@@ -514,32 +487,9 @@ export default function PipelineDatapathSVG({
         {/* HOVER DISPLAY */}
         {shouldShowHover && (
           <>
-            <rect
-              x="1"
-              y="400"
-              width="240"
-              height={hoverHeight}
-              fill="white"
-              stroke="black"
-            />
-            <foreignObject
-              x={1}
-              y={400}
-              width={240}
-              height={hoverHeight}
-              style={{ overflow: "visible" }}
-            >
-              <div
-                ref={hoverContentRef}
-                style={{
-                  margin: "10px",
-                  overflow: "visible",
-                  height: "auto",
-                  backgroundColor: "white",
-                }}
-              >
-                {hoverContent ?? analysisTextbox}
-              </div>
+            <rect x="1" y="400" width="240" height="160" stroke="black"/>
+            <foreignObject x={10} y={400} width={230} height={160}>
+              {hoverContent ?? analysisTextbox}
             </foreignObject>
           </>
         )}

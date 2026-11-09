@@ -1,33 +1,13 @@
-import {
-  instructionTypeMap, CommandType, PipelineState, IFPath,
-  IDPath, EXPath, MEMPath, WBPath, IFComponents, IDComponents, EXComponents, MEMComponents
-} from "./pipeline-types";
-import { formatUpperImmediate } from "@/src/data/sandbox-messages";
+import { instructionTypeMap, CommandType, PipelineState, IFPath,
+     IDPath, EXPath, MEMPath, WBPath, IFComponents, IDComponents, EXComponents, MEMComponents} from "./pipeline-types";  
+
 
 type PipelineStage = 'IF' | 'ID' | 'EX' | 'MEM' | 'WB';
+const pipelinestates = ['IF', 'ID', 'EX', 'MEM', 'WB'];
 
-function appendPipelineDrainCycle(states: PipelineState[]): PipelineState[] {
-  const lastState = states[states.length - 1];
-  if (!lastState) return states;
 
-  const hasPipelineContent = Object.values(lastState.stages).some(
-    (instruction) => instruction !== undefined && !instruction.trim().startsWith('bubble'),
-  );
-  if (!hasPipelineContent) return states;
 
-  return [
-    ...states,
-    {
-      cycle: lastState.cycle + 1,
-      stages: {},
-      hazards: [],
-      stageDetails: {},
-      component: { WB: null },
-    },
-  ];
-}
-
-export function handlePipeLinePreset(index: number): PipelineState[] | never {
+export function handlePipeLinePreset(index: number): PipelineState[] | never{
   const pipelineStates: PipelineState[] = [];
 
   if (index === 0) {
@@ -54,7 +34,7 @@ export function handlePipeLinePreset(index: number): PipelineState[] | never {
         IF: {
           pc: { value: 'PC = PC + 4', comment: 'Program Counter (PC): Holds the address of the current instruction. The instruction is fetched using the current PC value, then PC is updated to PC + 4 to point to the next sequential instruction address.' },
           instruction_mem: { value: 'add x28, x29, x31', comment: 'Instruction Memory: Stores program instructions. Outputs the fetched R-type instruction (at current PC address) for decoding and execution' },
-          default_adder: { value: 'Adds 4 to the current PC value to get the address of the next instruction.' }
+          default_adder: {value: 'Adds 4 to the current PC value to get the address of the next instruction.'}
         },
         ID: undefined,
         EX: undefined,
@@ -92,7 +72,7 @@ export function handlePipeLinePreset(index: number): PipelineState[] | never {
         IF: {
           pc: { value: 'PC = PC + 4', comment: 'Program Counter (PC): Holds the address of the current instruction. The instruction is fetched using the current PC value, then PC is updated to PC + 4 to point to the next sequential instruction address.' },
           instruction_mem: { value: 'sub x5, x28, x6', comment: 'Instruction Memory: Stores program instructions. Outputs the fetched R-type instruction (at current PC address) for decoding and execution' },
-          default_adder: { value: 'Adds 4 to the current PC value to get the address of the next instruction.' }
+          default_adder: {value: 'Adds 4 to the current PC value to get the address of the next instruction.'}
         },
         ID: {
           registers: {
@@ -311,8 +291,8 @@ export function handlePipeLinePreset(index: number): PipelineState[] | never {
         IF: undefined,
         ID: {
           registers: {
-            read_register_1: { value: "", comment: "" },
-            read_register_2: { value: "", comment: "" },
+            read_register_1: {value: "", comment: ""},
+            read_register_2: {value: "", comment: ""},
             write_register: { value: '', comment: 'Write Register: N/A\nNote that x28 is now written back.\n\n\n\n' }
           }
         },
@@ -320,9 +300,9 @@ export function handlePipeLinePreset(index: number): PipelineState[] | never {
         MEM: undefined,
         WB: null
       }
-
+      
     });
-    return appendPipelineDrainCycle(pipelineStates)
+    return pipelineStates
   }
   else if (index === 1) {
     // Preset 1: Control Hazard Example
@@ -348,7 +328,7 @@ export function handlePipeLinePreset(index: number): PipelineState[] | never {
         IF: {
           pc: { value: 'PC = PC + 4', comment: 'Program Counter (PC): Holds the address of the current instruction. The instruction is fetched using the current PC value, then PC is updated to PC + 4 to point to the next sequential instruction address.' },
           instruction_mem: { value: 'add x30, x31, x5', comment: 'Instruction Memory: Stores program instructions. Outputs the fetched R-type instruction (at current PC address) for decoding and execution' },
-          default_adder: { value: 'Adds 4 to the current PC value to get the address of the next instruction.' }
+          default_adder: {value: 'Adds 4 to the current PC value to get the address of the next instruction.'}
         },
         ID: undefined,
         EX: undefined,
@@ -363,7 +343,7 @@ export function handlePipeLinePreset(index: number): PipelineState[] | never {
       stages: { IF: 'beq x1, x0, 40', ID: 'add x30, x31, x5', EX: undefined, MEM: undefined, WB: undefined },
       hazards: [],
       stageDetails: {
-        IF: {
+        IF:{
           branch_taken: false,
           mux_pc: true,
           pc_increment: true,
@@ -387,7 +367,7 @@ export function handlePipeLinePreset(index: number): PipelineState[] | never {
         IF: {
           pc: { value: 'PC = PC + 4 (Fetch next instruction in sequence branch result unknown)', comment: 'Program Counter (PC): Current value of PC is used to fetch instruction from memory than value of PC is incremented.' },
           instruction_mem: { value: 'beq x1, x0, 40', comment: 'Instruction Memory: Stores program instructions. Outputs the fetched B-type instruction (at current PC address) for decoding and execution' }
-          , default_adder: { value: 'Adds 4 to the current PC value to get the address of the next instruction.' }
+          , default_adder: {value: 'Adds 4 to the current PC value to get the address of the next instruction.'}
 
         },
         ID: {
@@ -410,11 +390,11 @@ export function handlePipeLinePreset(index: number): PipelineState[] | never {
       hazards: [],
       stageDetails: {
         IF: {
-          branch_taken: false,
+          branch_taken: false, 
           mux_pc: true,
           pc_increment: true,
           pc_default: true,
-          pc_id: false,
+          pc_id: false, 
           pc_im: true,
           im_id: true
         },
@@ -441,11 +421,11 @@ export function handlePipeLinePreset(index: number): PipelineState[] | never {
           alu_mem: true
         }
       },
-      component: {
+     component: {
         IF: {
           pc: { value: 'PC = PC + 4 (Fetch next instruction in sequence branch result unknown)', comment: 'Program Counter (PC): Current value of PC is used to fetch instruction from memory than value of PC is incremented.' },
           instruction_mem: { value: 'addi x28, x0, 10', comment: `Instruction Memory: Speculatively fetching instruction.\n` },
-          default_adder: { value: 'Adds 4 to the current PC value to get the address of the next instruction.' }
+          default_adder: {value: 'Adds 4 to the current PC value to get the address of the next instruction.'}
         },
         ID: {
           registers: {
@@ -453,7 +433,7 @@ export function handlePipeLinePreset(index: number): PipelineState[] | never {
             read_register_2: { value: 'Val(x0)', comment: 'Read Register 2: Reads value from register x0 for branch comparison' },
             write_register: { value: 'N/A', comment: 'Write Register: No write register' },
           },
-          imm_gen: { value: `Extracts and sign-extends the immediate value from the instruction for use in branch target calculation.\nInput: The instruction: beq x1, x0, 40\nOutput: The immediate value: 40.` },
+          imm_gen: { value: `Extracts and sign-extends the immediate value from the instruction for use in branch target calculation.\nInput: The instruction: beq x1, x0, 40\nOutput: The immediate value: 40.`},
         },
         EX: {
           alu: { alu_result: 'ALU: Performs ADD operation → Val(x31) + Val(x5)' }
@@ -508,11 +488,11 @@ export function handlePipeLinePreset(index: number): PipelineState[] | never {
             read_register_2: { value: 'N/A', comment: 'Read Register 2: Not used in immediate instruction' },
             write_register: { value: 'x28', comment: 'Write Register: Destination register x28 for immediate add result' }
           },
-          imm_gen: { value: `Extracts and sign-extends the immediate value from the instruction for use in addi operation.\nInput: The instruction: addi x28, x29, 10\nOutput: The immediate value: 10` },
+          imm_gen: { value: `Extracts and sign-extends the immediate value from the instruction for use in addi operation.\nInput: The instruction: addi x28, x29, 10\nOutput: The immediate value: 10`},
         },
         EX: {
           alu: { alu_result: 'ALU: Branch comparison → x1 == x0. Assume that it is true, branch taken to PC + 80. Zero line highlighted representing that Branch condition holds' },
-          branch_adder: { value: 'Calculates the branch target address by adding the sign-extended immediate to the incremented PC value.\nInput: Current PC and immediate value is 40 but shifted left by 1 bit which is 80\nOutput: Target PC = PC + 80' }
+          branch_adder: {value: 'Calculates the branch target address by adding the sign-extended immediate to the incremented PC value.\nInput: Current PC and immediate value is 40 but shifted left by 1 bit which is 80\nOutput: Target PC = PC + 80'}
         },
         MEM: {
           data_memory: { read_data: 'Read Data: No data read from memory.', write_data: 'Write Data: No data written to memory.' }
@@ -524,7 +504,7 @@ export function handlePipeLinePreset(index: number): PipelineState[] | never {
     // Cycle 5: bubble in ID, bubble in EX, beq x1, x0, 40 in MEM, add x30, x31, x5 in WB
     pipelineStates.push({
       cycle: 5,
-      stages: { IF: undefined, ID: 'bubble(flush)', EX: 'bubble(flush)', MEM: 'beq x1, x0, 40', WB: 'add x30, x31, x5' },
+      stages: { IF: undefined, ID: 'buble(flush)', EX: 'bubble(flush)', MEM: 'beq x1, x0, 40', WB: 'add x30, x31, x5'},
       hazards: [],
       stageDetails: {
         IF: {
@@ -553,12 +533,12 @@ export function handlePipeLinePreset(index: number): PipelineState[] | never {
         IF: {
           pc: { value: 'PC = PC + 80', comment: 'Program Counter (PC): Holds the address of the current instruction. The instruction is fetched using the current PC value, then PC is updated to PC + 80 to point to the jump address.' },
           instruction_mem: { value: '', comment: 'Instruction Memory: Stores program instructions. Outputs the fetched instruction (at current PC address after branching) for decoding and execution' },
-          default_adder: { value: 'Adds 4 to the current PC value to get the address of the next instruction.' }
+          default_adder: {value: 'Adds 4 to the current PC value to get the address of the next instruction.'}
         },
         ID: {
           registers: {
-            read_register_1: { value: "", comment: "" },
-            read_register_2: { value: "", comment: "" },
+            read_register_1: {value: "", comment: ""},
+            read_register_2: {value: "", comment: ""},
             write_register: { value: '', comment: 'Write Register: N/A\nNote that x30 is now written back.\n\n\n\n' }
           }
         },
@@ -623,10 +603,10 @@ export function handlePipeLinePreset(index: number): PipelineState[] | never {
       }
     });
 
-    return appendPipelineDrainCycle(pipelineStates);
+    return pipelineStates;    
   }
-  else if (index === 2) {
-    // Cycle 1: lw x1, 0(x2) in IF
+  else if (index === 2){
+       // Cycle 1: lw x1, 0(x2) in IF
     pipelineStates.push({
       cycle: 1,
       stages: { IF: 'lw x1, 0(x2)', ID: undefined, EX: undefined, MEM: undefined, WB: undefined },
@@ -646,7 +626,7 @@ export function handlePipeLinePreset(index: number): PipelineState[] | never {
         IF: {
           pc: { value: 'PC = PC + 4', comment: 'Program Counter (PC): Holds the address of the current instruction. The instruction is fetched using the current PC value, then PC is updated to PC + 4 to point to the next sequential instruction address.' },
           instruction_mem: { value: 'lw x1, 0(x2)', comment: 'Instruction Memory: Stores program instructions. Outputs the fetched I-type load instruction (at current PC address) for decoding and execution' },
-          default_adder: { value: 'Adds 4 to the current PC value to get the address of the next instruction.' }
+          default_adder: {value: 'Adds 4 to the current PC value to get the address of the next instruction.'}
         },
         ID: undefined,
         EX: undefined,
@@ -654,7 +634,7 @@ export function handlePipeLinePreset(index: number): PipelineState[] | never {
         WB: null
       }
     });
-    // Cycle 2: lw x1, 0(x2) in ID, beq x1, x3, LABEL in IF
+      // Cycle 2: lw x1, 0(x2) in ID, beq x1, x3, LABEL in IF
     pipelineStates.push({
       cycle: 2,
       stages: { IF: 'beq x1, x3, LABEL', ID: 'lw x1, 0(x2)', EX: undefined, MEM: undefined, WB: undefined },
@@ -684,7 +664,7 @@ export function handlePipeLinePreset(index: number): PipelineState[] | never {
         IF: {
           pc: { value: 'PC = PC + 4', comment: 'Program Counter (PC): Holds the address of the current instruction. The instruction is fetched using the current PC value, then PC is updated to PC + 4 to point to the next sequential instruction address.' },
           instruction_mem: { value: 'beq x1, x3, LABEL', comment: 'Instruction Memory: Stores program instructions. Outputs the fetched B-type branch instruction (at current PC address) for decoding and execution' },
-          default_adder: { value: 'Adds 4 to the current PC value to get the address of the next instruction.' }
+          default_adder: {value: 'Adds 4 to the current PC value to get the address of the next instruction.'}
         },
         ID: {
           registers: {
@@ -692,14 +672,14 @@ export function handlePipeLinePreset(index: number): PipelineState[] | never {
             read_register_2: { value: 'N/A', comment: 'Read Register 2: Not used in load instruction.' },
             write_register: { value: 'x1', comment: 'Write Register: Destination register x1 for loaded data.' }
           },
-          imm_gen: { value: `Extracts and sign-extends the immediate value from the instruction for use in address calculation.\nInput: The instruction: lw x1, 0(x2)\nOutput: The immediate value: 0` },
+          imm_gen: { value: `Extracts and sign-extends the immediate value from the instruction for use in address calculation.\nInput: The instruction: lw x1, 0(x2)\nOutput: The immediate value: 0`},
         },
         EX: undefined,
         MEM: undefined,
         WB: null
       }
     });
-    pipelineStates.push({
+      pipelineStates.push({
       cycle: 3,
       stages: { IF: 'add x4, x1, x5', ID: 'beq x1, x3, LABEL', EX: 'lw x1, 0(x2)', MEM: undefined, WB: undefined },
       hazards: ['Data Hazard: beq instruction needs x1 which is being loaded by lw instruction.', 'Control Hazard: Branch result unknown, fetching next sequential instruction speculatively'],
@@ -719,8 +699,8 @@ export function handlePipeLinePreset(index: number): PipelineState[] | never {
           id_reg_write: false,
           id_imm_gen: true,
           imm_ex: true,
-          id_ex: true,
-          reg1_ex: true,
+          id_ex: true, 
+          reg1_ex: true, 
           reg2_ex: true
         },
         EX: {
@@ -740,7 +720,7 @@ export function handlePipeLinePreset(index: number): PipelineState[] | never {
         IF: {
           pc: { value: 'PC = PC + 4', comment: 'Program Counter (PC): Holds the address of the current instruction. The instruction is fetched using the current PC value, then PC is updated to PC + 4 to point to the next sequential instruction address.' },
           instruction_mem: { value: 'add x4, x1, x5', comment: 'Instruction Memory: Stores program instructions. Outputs the fetched R-type instruction (at current PC address) for decoding and execution' },
-          default_adder: { value: 'Adds 4 to the current PC value to get the address of the next instruction.' }
+          default_adder: {value: 'Adds 4 to the current PC value to get the address of the next instruction.'}
         },
         ID: {
           registers: {
@@ -748,7 +728,7 @@ export function handlePipeLinePreset(index: number): PipelineState[] | never {
             read_register_2: { value: 'Val(x3)', comment: 'Read Register 2: Reads value from register x3 for branch comparison' },
             write_register: { value: 'N/A', comment: 'Write Register: No write register for branch instruction.' }
           },
-          imm_gen: { value: `Extracts and sign-extends the immediate value from the instruction for use in branch target calculation.\nInput: The instruction: beq x1, x3, LABEL\nOutput: The immediate value: LABEL = 8 offset from current PC` },
+          imm_gen: { value: `Extracts and sign-extends the immediate value from the instruction for use in branch target calculation.\nInput: The instruction: beq x1, x3, LABEL\nOutput: The immediate value: LABEL = 8 offset from current PC`},
         },
         EX: {
           alu: { alu_result: 'ALU: Address calculation → Val(x2) + 0 = memory address.' }
@@ -761,7 +741,7 @@ export function handlePipeLinePreset(index: number): PipelineState[] | never {
     pipelineStates.push({
       cycle: 4,
       stages: { IF: 'sub x6, x4, x7', ID: 'add x4, x1, x5', EX: 'beq x1, x3, LABEL', MEM: 'lw x1, 0(x2)', WB: undefined },
-      hazards: ['Data Hazard: add instruction in ID stage needs register x1 which is not yet loaded by lw command', 'Control Hazard: Branch decision still unknown sequentially fetch the next instruction'],
+      hazards: ['Data Hazard: add instruction in ID stage needs register x1 which is not yet loaded by lw command','Control Hazard: Branch decision still unknown sequentially fetch the next instruction'],
       stageDetails: {
         IF: {
           branch_taken: false,
@@ -807,7 +787,7 @@ export function handlePipeLinePreset(index: number): PipelineState[] | never {
         {
           pc: { value: 'PC = PC + 4', comment: 'Program Counter (PC): Holds the address of the current instruction. The instruction is fetched using the current PC value, then PC is updated to PC + 4 to point to the next sequential instruction address.' },
           instruction_mem: { value: 'sub x6, x4, x7', comment: 'Instruction Memory: Stores program instructions. Outputs the fetched R-type instruction (at current PC address) for decoding and execution' }
-          , default_adder: { value: 'Adds 4 to the current PC value to get the address of the next instruction.' }
+          ,          default_adder: {value: 'Adds 4 to the current PC value to get the address of the next instruction.'}
 
         },
         ID: {
@@ -819,7 +799,7 @@ export function handlePipeLinePreset(index: number): PipelineState[] | never {
         },
         EX: {
           alu: { alu_result: 'Branch not taken. Zero line output from ALU is not highlighted representing branch not taken' },
-          branch_adder: { value: 'Calculates the branch target address by adding the sign-extended immediate to the incremented PC value.\nInput: Current PC and immediate value LABEL = 8 offset from current PC\nOutput: Target PC = PC + 8' }
+          branch_adder: {value: 'Calculates the branch target address by adding the sign-extended immediate to the incremented PC value.\nInput: Current PC and immediate value LABEL = 8 offset from current PC\nOutput: Target PC = PC + 8'}
         },
         MEM: {
           data_memory: { read_data: 'Read Data: Read word starting from calculated memory address', write_data: 'Write Data: No data written to memory' }
@@ -828,494 +808,493 @@ export function handlePipeLinePreset(index: number): PipelineState[] | never {
       }
     });
     // Cycle 5: lw x1, 0(x2) in WB, beq x1, x3, LABEL in MEM, add x4, x1, x5 in EX, sub x6, x4, x7 in ID
-    pipelineStates.push({
-      cycle: 5,
-      stages: { IF: undefined, ID: 'sub x6, x4, x7', EX: 'add x4, x1, x5', MEM: 'beq x1, x3, LABEL', WB: 'lw x1, 0(x2)' },
-      hazards: ['Data Hazard: sub instruction in ID stage needs register x4 which will be changed by add instruction in EX stage.'],
-      stageDetails: {
-        ID: {
-          id_reg1: true,
-          id_reg2: true,
-          id_reg_write: true,
-          id_imm_gen: false,
-          imm_ex: false,
-          id_ex: false,
-          reg1_ex: true,
-          reg2_ex: true
-        },
-        EX: {
-          ex_add: false,
-          add_mem: false,
-          reg1_alu: true,
-          reg2_mux: true,
-          ex_shift: false,
-          ex_mux: false,
-          mux_alu: true,
-          reg2_mem: false,
-          zero_mem: false,
-          alu_mem: true
-        },
-        MEM: {
-          zero_mem2: false,
-          alu_dm: false,
-          reg2_dm: false,
-          dm_wb: false,
-          alu_wb: false
-        },
-        WB: {
-          dm_mux: true,
-          alu_mux: false,
-          reg_write: true
+  pipelineStates.push({
+    cycle: 5,
+    stages: { IF: undefined, ID: 'sub x6, x4, x7', EX: 'add x4, x1, x5', MEM: 'beq x1, x3, LABEL', WB: 'lw x1, 0(x2)' },
+    hazards: ['Data Hazard: sub instruction in ID stage needs register x4 which will be changed by add instruction in EX stage.'],
+    stageDetails: {
+      ID: {
+        id_reg1: true,
+        id_reg2: true,
+        id_reg_write: true,
+        id_imm_gen: false,
+        imm_ex: false,
+        id_ex: false,
+        reg1_ex: true,
+        reg2_ex: true
+      },
+      EX: {
+        ex_add: false,
+        add_mem: false,
+        reg1_alu: true,
+        reg2_mux: true,
+        ex_shift: false,
+        ex_mux: false,
+        mux_alu: true,
+        reg2_mem: false,
+        zero_mem: false,
+        alu_mem: true
+      },
+      MEM: {
+        zero_mem2: false,
+        alu_dm: false,
+        reg2_dm: false,
+        dm_wb: false,
+        alu_wb: false
+      },
+      WB: {
+        dm_mux: true,
+        alu_mux: false,
+        reg_write: true
+      }
+    },
+    component: {
+      IF: undefined,
+      ID: {
+        registers: {
+          read_register_1: { value: 'Val(x4)', comment: 'Read Register 1: Reads value from register x4' },
+          read_register_2: { value: 'Val(x7)', comment: 'Read Register 2: Reads value from register x7' },
+          write_register: { value: `x6\nWrite Data: Word loaded from memory by lw instruction is stored in register x1`, comment: 'Write Register: Destination register for ALU result' }
         }
       },
-      component: {
-        IF: undefined,
-        ID: {
-          registers: {
-            read_register_1: { value: 'Val(x4)', comment: 'Read Register 1: Reads value from register x4' },
-            read_register_2: { value: 'Val(x7)', comment: 'Read Register 2: Reads value from register x7' },
-            write_register: { value: `x6\nWrite Data: Word loaded from memory by lw instruction is stored in register x1`, comment: 'Write Register: Destination register for ALU result' }
-          }
-        },
-        EX: {
-          alu: { alu_result: 'ALU: Performs ADD operation → Val(x1) + Val(x5).' }
-        },
-        MEM: {
-          data_memory: { read_data: 'Read Data: No data read from memory.', write_data: 'Write Data: No data written to memory.' }
-        },
-        WB: null
-      }
-    });
+      EX: {
+        alu: { alu_result: 'ALU: Performs ADD operation → Val(x1) + Val(x5).' }
+      },
+      MEM: {
+        data_memory: { read_data: 'Read Data: No data read from memory.', write_data: 'Write Data: No data written to memory.' }
+      },
+      WB: null
+    }
+  });
 
-    // Cycle 6: beq x1, x3, LABEL in WB, add x4, x1, x5 in MEM, sub x6, x4, x7 in EX
-    pipelineStates.push({
-      cycle: 6,
-      stages: { IF: undefined, ID: undefined, EX: 'sub x6, x4, x7', MEM: 'add x4, x1, x5', WB: 'beq x1, x3, LABEL' },
-      hazards: [],
-      stageDetails: {
-        EX: {
-          ex_add: false,
-          add_mem: false,
-          reg1_alu: true,
-          reg2_mux: true,
-          ex_shift: false,
-          ex_mux: false,
-          mux_alu: true,
-          reg2_mem: false,
-          zero_mem: false,
-          alu_mem: true
-        },
-        MEM: {
-          zero_mem2: false,
-          alu_dm: false,
-          reg2_dm: false,
-          dm_wb: false,
-          alu_wb: true
-        },
-        WB: {
-          dm_mux: false,
-          alu_mux: false,
-          reg_write: false
-        }
+  // Cycle 6: beq x1, x3, LABEL in WB, add x4, x1, x5 in MEM, sub x6, x4, x7 in EX
+  pipelineStates.push({
+    cycle: 6,
+    stages: { IF: undefined, ID: undefined, EX: 'sub x6, x4, x7', MEM: 'add x4, x1, x5', WB: 'beq x1, x3, LABEL' },
+    hazards: [],
+    stageDetails: {
+      EX: {
+        ex_add: false,
+        add_mem: false,
+        reg1_alu: true,
+        reg2_mux: true,
+        ex_shift: false,
+        ex_mux: false,
+        mux_alu: true,
+        reg2_mem: false,
+        zero_mem: false,
+        alu_mem: true
       },
-      component: {
-        IF: undefined,
-        ID: undefined,
-        EX: {
-          alu: { alu_result: 'ALU: Performs SUB operation → Val(x4) - Val(x7).' }
-        },
-        MEM: {
-          data_memory: { read_data: 'Read Data: No data read from memory.', write_data: 'Write Data: No data written to memory.' }
-        },
-        WB: null
+      MEM: {
+        zero_mem2: false,
+        alu_dm: false,
+        reg2_dm: false,
+        dm_wb: false,
+        alu_wb: true
+      },
+      WB: {
+        dm_mux: false,
+        alu_mux: false,
+        reg_write: false
       }
-    });
+    },
+    component: {
+      IF: undefined,
+      ID: undefined,
+      EX: {
+        alu: { alu_result: 'ALU: Performs SUB operation → Val(x4) - Val(x7).' }
+      },
+      MEM: {
+        data_memory: { read_data: 'Read Data: No data read from memory.', write_data: 'Write Data: No data written to memory.' }
+      },
+      WB: null
+    }
+  });
 
-    // Cycle 7: add x31, x1, x5 in WB, sub x6, x31, x7 in MEM
-    pipelineStates.push({
-      cycle: 7,
-      stages: { IF: undefined, ID: '', EX: undefined, MEM: 'sub x6, x31, x7', WB: 'add x31, x1, x5' },
-      hazards: [],
-      stageDetails: {
-        MEM: {
-          zero_mem2: false,
-          alu_dm: false,
-          reg2_dm: false,
-          dm_wb: false,
-          alu_wb: true
-        },
-        WB: {
-          dm_mux: false,
-          alu_mux: true,
-          reg_write: true
+  // Cycle 7: add x31, x1, x5 in WB, sub x6, x31, x7 in MEM
+  pipelineStates.push({
+    cycle: 7,
+    stages: { IF: undefined, ID: '', EX: undefined, MEM: 'sub x6, x31, x7', WB: 'add x31, x1, x5' },
+    hazards: [],
+    stageDetails: {
+      MEM: {
+        zero_mem2: false,
+        alu_dm: false,
+        reg2_dm: false,
+        dm_wb: false,
+        alu_wb: true
+      },
+      WB: {
+        dm_mux: false,
+        alu_mux: true,
+        reg_write: true
+      }
+    },
+    component: {
+      IF: undefined,
+      ID: {
+        registers: {
+          read_register_1: { value: 'N/A', comment: 'Read Register 1: Not used in this stage' },
+          read_register_2: { value: 'N/A', comment: 'Read Register 2: Not used in this stage' },
+          write_register: { value: 'x31=ALU Result', comment: 'Write Data: Write result to register x31' }
         }
       },
-      component: {
-        IF: undefined,
-        ID: {
-          registers: {
-            read_register_1: { value: 'N/A', comment: 'Read Register 1: Not used in this stage' },
-            read_register_2: { value: 'N/A', comment: 'Read Register 2: Not used in this stage' },
-            write_register: { value: 'x31=ALU Result', comment: 'Write Data: Write result to register x31' }
-          }
-        },
-        EX: undefined,
-        MEM: {
-          data_memory: { read_data: 'Read Data: No data read from memory.', write_data: 'Write Data: No data written to memory.' }
-        },
-        WB: null
-      }
-    });
+      EX: undefined,
+      MEM: {
+        data_memory: { read_data: 'Read Data: No data read from memory.', write_data: 'Write Data: No data written to memory.' }
+      },
+      WB: null
+    }
+  });
 
-    // Cycle 8: sub x6, x31, x7 in WB
-    pipelineStates.push({
-      cycle: 8,
-      stages: { IF: undefined, ID: '', EX: undefined, MEM: undefined, WB: 'sub x6, x31, x7' },
-      hazards: [],
-      stageDetails: {
-        WB: {
-          dm_mux: false,
-          alu_mux: true,
-          reg_write: true
+  // Cycle 8: sub x6, x31, x7 in WB
+  pipelineStates.push({
+    cycle: 8,
+    stages: { IF: undefined, ID: '', EX: undefined, MEM: undefined, WB: 'sub x6, x31, x7' },
+    hazards: [],
+    stageDetails: {
+      WB: {
+        dm_mux: false,
+        alu_mux: true,
+        reg_write: true
+      }
+    },
+    component: {
+      IF: undefined,
+      ID: {
+        registers:{
+          read_register_1: { value: 'N/A', comment: 'Read Register 1: Not used in this stage' },
+          read_register_2: { value: 'N/A', comment: 'Read Register 2: Not used in this stage' },
+          write_register: { value: 'x6=ALU Result', comment: 'Write Data: Write result to register x6' }
         }
       },
-      component: {
-        IF: undefined,
-        ID: {
-          registers: {
-            read_register_1: { value: 'N/A', comment: 'Read Register 1: Not used in this stage' },
-            read_register_2: { value: 'N/A', comment: 'Read Register 2: Not used in this stage' },
-            write_register: { value: 'x6=ALU Result', comment: 'Write Data: Write result to register x6' }
-          }
-        },
-        EX: undefined,
-        MEM: undefined,
-        WB: null
-      }
-    });
-    return appendPipelineDrainCycle(pipelineStates)
+      EX: undefined,
+      MEM: undefined,
+      WB: null
+    }
+  });
+    return pipelineStates
   }
   else if (index === 3) {
-    // Preset 3: No Hazards Example
-    // Instructions: add x28, x29, x31; li x29, 10; addi x28, x5, 10
-    // Total cycles: 3 instructions + 4 = 7 cycles
+  // Preset 3: No Hazards Example
+  // Instructions: add x28, x29, x31; li x29, 10; addi x28, x5, 10
+  // Total cycles: 3 instructions + 4 = 7 cycles
 
-    // Cycle 1: add x28, x29, x31 in IF
-    pipelineStates.push({
-      cycle: 1,
-      stages: { IF: 'add x28, x29, x31', ID: undefined, EX: undefined, MEM: undefined, WB: undefined },
-      hazards: [],
-      stageDetails: {
-        IF: {
-          branch_taken: false,
-          mux_pc: true,
-          pc_increment: true,
-          pc_default: true,
-          pc_id: false,
-          pc_im: true,
-          im_id: true
+  // Cycle 1: add x28, x29, x31 in IF
+  pipelineStates.push({
+    cycle: 1,
+    stages: { IF: 'add x28, x29, x31', ID: undefined, EX: undefined, MEM: undefined, WB: undefined },
+    hazards: [],
+    stageDetails: {
+      IF: {
+        branch_taken: false,
+        mux_pc: true,
+        pc_increment: true,
+        pc_default: true,
+        pc_id: false,
+        pc_im: true,
+        im_id: true
+      }
+    },
+    component: {
+      IF: {
+        pc: { value: 'PC = PC + 4', comment: 'Program Counter (PC): Holds the address of the current instruction. The instruction is fetched using the current PC value, then PC is updated to PC + 4 to point to the next sequential instruction address.' },
+        instruction_mem: { value: 'add x28, x29, x31', comment: 'Instruction Memory: Stores program instructions. Outputs the fetched R-type instruction (at current PC address) for decoding and execution' },
+        default_adder: {value: 'Adds 4 to the current PC value to get the address of the next instruction.'}
+
+      },
+      ID: undefined,
+      EX: undefined,
+      MEM: undefined,
+      WB: null
+    }
+  });
+
+  // Cycle 2: add x28, x29, x31 in ID, li x29, 10 in IF
+  pipelineStates.push({
+    cycle: 2,
+    stages: { IF: 'addi x29, x0, 10', ID: 'add x28, x29, x31', EX: undefined, MEM: undefined, WB: undefined },
+    hazards: [],
+    stageDetails: {
+      IF: {
+        branch_taken: false,
+        mux_pc: true,
+        pc_increment: true,
+        pc_default: true,
+        pc_id: false,
+        pc_im: true,
+        im_id: true
+      },
+      ID: {
+        id_reg1: true,
+        id_reg2: true,
+        id_reg_write: true,
+        id_imm_gen: false,
+        imm_ex: false,
+        id_ex: false,
+        reg1_ex: true,
+        reg2_ex: true
+      }
+    },
+    component: {
+      IF: {
+        pc: { value: 'PC = PC + 4', comment: 'Program Counter (PC): Holds the address of the current instruction. The instruction is fetched using the current PC value, then PC is updated to PC + 4 to point to the next sequential instruction address.' },
+        instruction_mem: { value: 'addi x29, x0, 10', comment: `Instruction Memory: Stores program instructions. Outputs the fetched I-type instruction (at current PC address) for decoding and execution.\n Note: li is a pseudo instruction it is treated as addi` },
+        default_adder: {value: 'Adds 4 to the current PC value to get the address of the next instruction.'}
+
+      },
+      ID: {
+        registers: {
+          read_register_1: { value: 'Val(x29)', comment: 'Read Register 1: Reads value from source register x29' },
+          read_register_2: { value: 'Val(x31)', comment: 'Read Register 2: Reads value from source register x31' },
+          write_register: { value: 'x28', comment: 'Write Register: Destination register x28 for ALU result' }
         }
       },
-      component: {
-        IF: {
-          pc: { value: 'PC = PC + 4', comment: 'Program Counter (PC): Holds the address of the current instruction. The instruction is fetched using the current PC value, then PC is updated to PC + 4 to point to the next sequential instruction address.' },
-          instruction_mem: { value: 'add x28, x29, x31', comment: 'Instruction Memory: Stores program instructions. Outputs the fetched R-type instruction (at current PC address) for decoding and execution' },
-          default_adder: { value: 'Adds 4 to the current PC value to get the address of the next instruction.' }
+      EX: undefined,
+      MEM: undefined,
+      WB: null
+    }
+  });
 
-        },
-        ID: undefined,
-        EX: undefined,
-        MEM: undefined,
-        WB: null
+  // Cycle 3: add x28, x29, x31 in EX, li x29, 10 in ID, addi x28, x5, 10 in IF
+  pipelineStates.push({
+    cycle: 3,
+    stages: { IF: 'addi x28, x5, 10', ID: 'addi x29, x0, 10', EX: 'add x28, x29, x31', MEM: undefined, WB: undefined },
+    hazards: [],
+    stageDetails: {
+      IF: {
+        branch_taken: false,
+        mux_pc: true,
+        pc_increment: true,
+        pc_default: true,
+        pc_id: false,
+        pc_im: true,
+        im_id: true
+      },
+      ID: {
+        id_reg1: true,
+        id_reg2: false,
+        id_reg_write: true,
+        id_imm_gen: true,
+        imm_ex: true,
+        id_ex: false,
+        reg1_ex: true,
+        reg2_ex: false
+      },
+      EX: {
+        ex_add: false,
+        add_mem: false,
+        reg1_alu: true,
+        reg2_mux: true,
+        ex_shift: false,
+        ex_mux: false,
+        mux_alu: true,
+        reg2_mem: false,
+        zero_mem: false,
+        alu_mem: true
       }
-    });
+    },
+    component: {
+      IF: {
+        pc: { value: 'PC = PC + 4', comment: 'Program Counter (PC): Holds the address of the current instruction. The instruction is fetched using the current PC value, then PC is updated to PC + 4 to point to the next sequential instruction address.' },
+        instruction_mem: { value: 'addi x28, x5, 10', comment: 'Instruction Memory: Stores program instructions. Outputs the fetched I-type instruction (at current PC address) for decoding and execution' },
+        default_adder: {value: 'Adds 4 to the current PC value to get the address of the next instruction.'}
 
-    // Cycle 2: add x28, x29, x31 in ID, li x29, 10 in IF
-    pipelineStates.push({
-      cycle: 2,
-      stages: { IF: 'addi x29, x0, 10', ID: 'add x28, x29, x31', EX: undefined, MEM: undefined, WB: undefined },
-      hazards: [],
-      stageDetails: {
-        IF: {
-          branch_taken: false,
-          mux_pc: true,
-          pc_increment: true,
-          pc_default: true,
-          pc_id: false,
-          pc_im: true,
-          im_id: true
+      },
+      ID: {
+        registers: {
+          read_register_1: { value: 'Val(x0)', comment: 'Read Register 1: Reads zero register x0 for li (addi) instruction' },
+          read_register_2: { value: 'N/A', comment: 'Read Register 2: Not used in li instruction' },
+          write_register: { value: 'x29', comment: 'Write Register: Destination register x29 for immediate value' }
         },
-        ID: {
-          id_reg1: true,
-          id_reg2: true,
-          id_reg_write: true,
-          id_imm_gen: false,
-          imm_ex: false,
-          id_ex: false,
-          reg1_ex: true,
-          reg2_ex: true
+        imm_gen: { value: `Extracts and sign-extends the immediate value from the instruction for use in addi operation.\nInput: The instruction: addi x29, x0, 10\nOutput: The immediate value: 10`},
+      },
+      EX: {
+        alu: { alu_result: 'ALU: Performs ADD operation → Val(x29) + Val(x31).' }
+      },
+      MEM: undefined,
+      WB: null
+    }
+  });
+
+  // Cycle 4: add x28, x29, x31 in MEM, li x29, 10 in EX, addi x28, x5, 10 in ID
+  pipelineStates.push({
+    cycle: 4,
+    stages: { IF: undefined, ID: 'addi x28, x5, 10', EX: 'addi x29, x0, 10', MEM: 'add x28, x29, x31', WB: undefined },
+    hazards: [],
+    stageDetails: {
+      ID: {
+        id_reg1: true,
+        id_reg2: false,
+        id_reg_write: true,
+        id_imm_gen: true,
+        imm_ex: true,
+        id_ex: false,
+        reg1_ex: true,
+        reg2_ex: false
+      },
+      EX: {
+        ex_add: false,
+        add_mem: false,
+        reg1_alu: true,
+        reg2_mux: false,
+        ex_shift: false,
+        ex_mux: true,
+        mux_alu: true,
+        reg2_mem: false,
+        zero_mem: false,
+        alu_mem: true
+      },
+      MEM: {
+        zero_mem2: false,
+        alu_dm: false,
+        reg2_dm: false,
+        dm_wb: false,
+        alu_wb: true
+      }
+    },
+    component: {
+      IF: undefined,
+      ID: {
+        registers: {
+          read_register_1: { value: 'Val(x5)', comment: 'Read Register 1: Reads value from source register x5' },
+          read_register_2: { value: 'N/A', comment: 'Read Register 2: Not used in addi instruction' },
+          write_register: { value: 'x28', comment: 'Write Register: Destination register x28 for ALU result' }
+        },
+        imm_gen: { value: `Extracts and sign-extends the immediate value from the instruction for use in addi operation.\nInput: The instruction: addi x28, x5, 10\nOutput: The immediate value: 10`},
+      },
+      EX: {
+        alu: { alu_result: 'ALU: Performs ADDI operation → Val(x0) + 10.' }
+      },
+      MEM: {
+        data_memory: { read_data: 'Read Data: No data read from memory.', write_data: 'Write Data: No data written to memory.' }
+      },
+      WB: null
+    }
+  });
+
+  // Cycle 5: add x28, x29, x31 in WB, li x29, 10 in MEM, addi x28, x5, 10 in EX
+  pipelineStates.push({
+    cycle: 5,
+    stages: { IF: undefined, ID: '', EX: 'addi x28, x5, 10', MEM: 'addi x29, x0, 10', WB: 'add x28, x29, x31' },
+    hazards: [],
+    stageDetails: {
+      EX: {
+        ex_add: false,
+        add_mem: false,
+        reg1_alu: true,
+        reg2_mux: false,
+        ex_shift: false,
+        ex_mux: true,
+        mux_alu: true,
+        reg2_mem: false,
+        zero_mem: false,
+        alu_mem: true
+      },
+      MEM: {
+        zero_mem2: false,
+        alu_dm: false,
+        reg2_dm: false,
+        dm_wb: false,
+        alu_wb: true
+      },
+      WB: {
+        dm_mux: false,
+        alu_mux: true,
+        reg_write: true
+      }
+    },
+    component: {
+      IF: undefined,
+      EX: {
+        alu: { alu_result: 'ALU: Performs ADDI operation → Val(x5) + 10.' }
+      },
+      MEM: {
+        data_memory: { read_data: 'Read Data: No data read from memory.', write_data: 'Write Data: No data written to memory.' }
+      },
+      ID: {registers: {
+          read_register_1: { value: 'N/A', comment: 'Read Register 1: Not used in this stage' },
+          read_register_2: { value: 'N/A', comment: 'Read Register 2: Not used in this stage' },
+          write_register: { value: 'x28=ALU Result', comment: 'Write Data: Write result to register x28' }
         }
       },
-      component: {
-        IF: {
-          pc: { value: 'PC = PC + 4', comment: 'Program Counter (PC): Holds the address of the current instruction. The instruction is fetched using the current PC value, then PC is updated to PC + 4 to point to the next sequential instruction address.' },
-          instruction_mem: { value: 'addi x29, x0, 10', comment: `Instruction Memory: Stores program instructions. Outputs the fetched I-type instruction (at current PC address) for decoding and execution.\n Note: li is a pseudo instruction it is treated as addi` },
-          default_adder: { value: 'Adds 4 to the current PC value to get the address of the next instruction.' }
+      WB: null
+    }
+  });
 
-        },
-        ID: {
-          registers: {
-            read_register_1: { value: 'Val(x29)', comment: 'Read Register 1: Reads value from source register x29' },
-            read_register_2: { value: 'Val(x31)', comment: 'Read Register 2: Reads value from source register x31' },
-            write_register: { value: 'x28', comment: 'Write Register: Destination register x28 for ALU result' }
-          }
-        },
-        EX: undefined,
-        MEM: undefined,
-        WB: null
+  // Cycle 6: li x29, 10 in WB, addi x28, x5, 10 in MEM
+  pipelineStates.push({
+    cycle: 6,
+    stages: { IF: undefined, ID: '', EX: undefined, MEM: 'addi x28, x5, 10', WB: 'addi x29, x0, 10' },
+    hazards: [],
+    stageDetails: {
+      MEM: {
+        zero_mem2: false,
+        alu_dm: false,
+        reg2_dm: false,
+        dm_wb: false,
+        alu_wb: true
+      },
+      WB: {
+        dm_mux: false,
+        alu_mux: true,
+        reg_write: true
       }
-    });
-
-    // Cycle 3: add x28, x29, x31 in EX, li x29, 10 in ID, addi x28, x5, 10 in IF
-    pipelineStates.push({
-      cycle: 3,
-      stages: { IF: 'addi x28, x5, 10', ID: 'addi x29, x0, 10', EX: 'add x28, x29, x31', MEM: undefined, WB: undefined },
-      hazards: [],
-      stageDetails: {
-        IF: {
-          branch_taken: false,
-          mux_pc: true,
-          pc_increment: true,
-          pc_default: true,
-          pc_id: false,
-          pc_im: true,
-          im_id: true
-        },
-        ID: {
-          id_reg1: true,
-          id_reg2: false,
-          id_reg_write: true,
-          id_imm_gen: true,
-          imm_ex: true,
-          id_ex: false,
-          reg1_ex: true,
-          reg2_ex: false
-        },
-        EX: {
-          ex_add: false,
-          add_mem: false,
-          reg1_alu: true,
-          reg2_mux: true,
-          ex_shift: false,
-          ex_mux: false,
-          mux_alu: true,
-          reg2_mem: false,
-          zero_mem: false,
-          alu_mem: true
+    },
+    component: {
+      IF: undefined,
+      EX: undefined,
+      MEM: {
+        data_memory: { read_data: 'Read Data: No data read from memory.', write_data: 'Write Data: No data written to memory.' }
+      },
+      ID: {
+        registers: {
+          read_register_1: { value: 'N/A', comment: 'Read Register 1: Not used in this stage' },
+          read_register_2: { value: 'N/A', comment: 'Read Register 2: Not used in this stage' },
+          write_register: { value: 'x29=ALU RESULT(Immediate Value)', comment: 'Write Data: Write immediate value 10 to register x29' }
         }
       },
-      component: {
-        IF: {
-          pc: { value: 'PC = PC + 4', comment: 'Program Counter (PC): Holds the address of the current instruction. The instruction is fetched using the current PC value, then PC is updated to PC + 4 to point to the next sequential instruction address.' },
-          instruction_mem: { value: 'addi x28, x5, 10', comment: 'Instruction Memory: Stores program instructions. Outputs the fetched I-type instruction (at current PC address) for decoding and execution' },
-          default_adder: { value: 'Adds 4 to the current PC value to get the address of the next instruction.' }
+      WB: null
+    }
+  });
 
-        },
-        ID: {
-          registers: {
-            read_register_1: { value: 'Val(x0)', comment: 'Read Register 1: Reads zero register x0 for li (addi) instruction' },
-            read_register_2: { value: 'N/A', comment: 'Read Register 2: Not used in li instruction' },
-            write_register: { value: 'x29', comment: 'Write Register: Destination register x29 for immediate value' }
-          },
-          imm_gen: { value: `Extracts and sign-extends the immediate value from the instruction for use in addi operation.\nInput: The instruction: addi x29, x0, 10\nOutput: The immediate value: 10` },
-        },
-        EX: {
-          alu: { alu_result: 'ALU: Performs ADD operation → Val(x29) + Val(x31).' }
-        },
-        MEM: undefined,
-        WB: null
+  // Cycle 7: addi x28, x5, 10 in WB
+  pipelineStates.push({
+    cycle: 7,
+    stages: { IF: undefined, ID: '', EX: undefined, MEM: undefined, WB: 'addi x28, x5, 10' },
+    hazards: [],
+    stageDetails: {
+      WB: {
+        dm_mux: false,
+        alu_mux: true,
+        reg_write: true
       }
-    });
-
-    // Cycle 4: add x28, x29, x31 in MEM, li x29, 10 in EX, addi x28, x5, 10 in ID
-    pipelineStates.push({
-      cycle: 4,
-      stages: { IF: undefined, ID: 'addi x28, x5, 10', EX: 'addi x29, x0, 10', MEM: 'add x28, x29, x31', WB: undefined },
-      hazards: [],
-      stageDetails: {
-        ID: {
-          id_reg1: true,
-          id_reg2: false,
-          id_reg_write: true,
-          id_imm_gen: true,
-          imm_ex: true,
-          id_ex: false,
-          reg1_ex: true,
-          reg2_ex: false
-        },
-        EX: {
-          ex_add: false,
-          add_mem: false,
-          reg1_alu: true,
-          reg2_mux: false,
-          ex_shift: false,
-          ex_mux: true,
-          mux_alu: true,
-          reg2_mem: false,
-          zero_mem: false,
-          alu_mem: true
-        },
-        MEM: {
-          zero_mem2: false,
-          alu_dm: false,
-          reg2_dm: false,
-          dm_wb: false,
-          alu_wb: true
+    },
+    component: {
+      IF: undefined,
+      ID: {
+        registers: {
+          read_register_1: { value: 'N/A', comment: 'Read Register 1: Not used in this stage' },
+          read_register_2: { value: 'N/A', comment: 'Read Register 2: Not used in this stage' },
+          write_register: { value: 'x28=ALU Result', comment: 'Write Data: Write result to register x28' }
         }
       },
-      component: {
-        IF: undefined,
-        ID: {
-          registers: {
-            read_register_1: { value: 'Val(x5)', comment: 'Read Register 1: Reads value from source register x5' },
-            read_register_2: { value: 'N/A', comment: 'Read Register 2: Not used in addi instruction' },
-            write_register: { value: 'x28', comment: 'Write Register: Destination register x28 for ALU result' }
-          },
-          imm_gen: { value: `Extracts and sign-extends the immediate value from the instruction for use in addi operation.\nInput: The instruction: addi x28, x5, 10\nOutput: The immediate value: 10` },
-        },
-        EX: {
-          alu: { alu_result: 'ALU: Performs ADDI operation → Val(x0) + 10.' }
-        },
-        MEM: {
-          data_memory: { read_data: 'Read Data: No data read from memory.', write_data: 'Write Data: No data written to memory.' }
-        },
-        WB: null
-      }
-    });
+      EX: undefined,
+      MEM: undefined,
+      WB: null
+    }
+  });
 
-    // Cycle 5: add x28, x29, x31 in WB, li x29, 10 in MEM, addi x28, x5, 10 in EX
-    pipelineStates.push({
-      cycle: 5,
-      stages: { IF: undefined, ID: '', EX: 'addi x28, x5, 10', MEM: 'addi x29, x0, 10', WB: 'add x28, x29, x31' },
-      hazards: [],
-      stageDetails: {
-        EX: {
-          ex_add: false,
-          add_mem: false,
-          reg1_alu: true,
-          reg2_mux: false,
-          ex_shift: false,
-          ex_mux: true,
-          mux_alu: true,
-          reg2_mem: false,
-          zero_mem: false,
-          alu_mem: true
-        },
-        MEM: {
-          zero_mem2: false,
-          alu_dm: false,
-          reg2_dm: false,
-          dm_wb: false,
-          alu_wb: true
-        },
-        WB: {
-          dm_mux: false,
-          alu_mux: true,
-          reg_write: true
-        }
-      },
-      component: {
-        IF: undefined,
-        EX: {
-          alu: { alu_result: 'ALU: Performs ADDI operation → Val(x5) + 10.' }
-        },
-        MEM: {
-          data_memory: { read_data: 'Read Data: No data read from memory.', write_data: 'Write Data: No data written to memory.' }
-        },
-        ID: {
-          registers: {
-            read_register_1: { value: 'N/A', comment: 'Read Register 1: Not used in this stage' },
-            read_register_2: { value: 'N/A', comment: 'Read Register 2: Not used in this stage' },
-            write_register: { value: 'x28=ALU Result', comment: 'Write Data: Write result to register x28' }
-          }
-        },
-        WB: null
-      }
-    });
-
-    // Cycle 6: li x29, 10 in WB, addi x28, x5, 10 in MEM
-    pipelineStates.push({
-      cycle: 6,
-      stages: { IF: undefined, ID: '', EX: undefined, MEM: 'addi x28, x5, 10', WB: 'addi x29, x0, 10' },
-      hazards: [],
-      stageDetails: {
-        MEM: {
-          zero_mem2: false,
-          alu_dm: false,
-          reg2_dm: false,
-          dm_wb: false,
-          alu_wb: true
-        },
-        WB: {
-          dm_mux: false,
-          alu_mux: true,
-          reg_write: true
-        }
-      },
-      component: {
-        IF: undefined,
-        EX: undefined,
-        MEM: {
-          data_memory: { read_data: 'Read Data: No data read from memory.', write_data: 'Write Data: No data written to memory.' }
-        },
-        ID: {
-          registers: {
-            read_register_1: { value: 'N/A', comment: 'Read Register 1: Not used in this stage' },
-            read_register_2: { value: 'N/A', comment: 'Read Register 2: Not used in this stage' },
-            write_register: { value: 'x29=ALU RESULT(Immediate Value)', comment: 'Write Data: Write immediate value 10 to register x29' }
-          }
-        },
-        WB: null
-      }
-    });
-
-    // Cycle 7: addi x28, x5, 10 in WB
-    pipelineStates.push({
-      cycle: 7,
-      stages: { IF: undefined, ID: '', EX: undefined, MEM: undefined, WB: 'addi x28, x5, 10' },
-      hazards: [],
-      stageDetails: {
-        WB: {
-          dm_mux: false,
-          alu_mux: true,
-          reg_write: true
-        }
-      },
-      component: {
-        IF: undefined,
-        ID: {
-          registers: {
-            read_register_1: { value: 'N/A', comment: 'Read Register 1: Not used in this stage' },
-            read_register_2: { value: 'N/A', comment: 'Read Register 2: Not used in this stage' },
-            write_register: { value: 'x28=ALU Result', comment: 'Write Data: Write result to register x28' }
-          }
-        },
-        EX: undefined,
-        MEM: undefined,
-        WB: null
-      }
-    });
-
-    return appendPipelineDrainCycle(pipelineStates);
-  }
-
-  else {
+  return pipelineStates;
+}
+  
+  else{
     throw new Error
   }
 }
 
 
-export function simulatePipeline(instructions: string[]): PipelineState[] | never {
+export function simulatePipeline(instructions: string[]): PipelineState[] | never{
   try {
     if (!Array.isArray(instructions) || instructions.length === 0) {
       throw new Error('Provide a non-empty instruction array');
@@ -1323,61 +1302,7 @@ export function simulatePipeline(instructions: string[]): PipelineState[] | neve
 
     const pipelineStates: PipelineState[] = [];
     const totalInstructions = instructions.length;
-    const normalizedInstructions = instructions.map((instruction) =>
-      instruction.replace(/\s*,\s*/g, ' ').trim().replace(/\s+/g, ' '),
-    );
-    const fetchStarts: number[] = [];
-    const executeStarts: number[] = [];
-    const writers: (string | undefined)[] = [];
-
-    const readsFor = (instruction: string): string[] => {
-      const [command, ...operands] = instruction.split(' ');
-      if (instructionTypeMap[command] === CommandType.BType) return operands.slice(0, 2);
-      if (instructionTypeMap[command] === CommandType.SType) {
-        return operands.flatMap((operand) => operand.match(/x\d+/g) ?? []);
-      }
-      if (instructionTypeMap[command] === CommandType.IType && command.startsWith('l')) {
-        return operands[1]?.match(/x\d+/g) ?? [];
-      }
-      return operands.slice(1).filter((operand) => /^x\d+$/i.test(operand));
-    };
-
-    normalizedInstructions.forEach((instruction, index) => {
-      const [command, destination] = instruction.split(' ');
-      const previousFetch = index > 0 ? fetchStarts[index - 1] + 1 : 1;
-      const previousWasStalled = index > 0
-        && executeStarts[index - 1] > fetchStarts[index - 1] + 2;
-      const fetch = Math.max(
-        index + 1,
-        previousFetch,
-        previousWasStalled ? executeStarts[index - 1] : 1,
-      );
-      let execute = fetch + 2;
-      const reads = readsFor(instruction);
-      for (let producer = 0; producer < index; producer += 1) {
-        if (writers[producer] && reads.includes(writers[producer] as string)) {
-          execute = Math.max(execute, executeStarts[producer] + 3);
-        }
-      }
-      fetchStarts.push(fetch);
-      executeStarts.push(execute);
-      writers.push(
-        instructionTypeMap[command] === CommandType.RType
-          || instructionTypeMap[command] === CommandType.UType
-          || (instructionTypeMap[command] === CommandType.IType && (command === 'li' || !command.startsWith('l')))
-          ? destination
-          : undefined,
-      );
-    });
-
-    const branchIndex = normalizedInstructions.findIndex(
-      (instruction) => instructionTypeMap[instruction.split(' ')[0]] === CommandType.BType,
-    );
-    const lastVisibleInstruction = branchIndex >= 0 ? branchIndex : totalInstructions - 1;
-    const totalCycles = Math.max(
-      totalInstructions + 4,
-      executeStarts[lastVisibleInstruction] + 3,
-    );
+    const totalCycles = totalInstructions + 4;
 
     for (let cycle = 1; cycle <= totalCycles; cycle++) {
       const stageMap: Record<PipelineStage, string | undefined> = {
@@ -1390,43 +1315,23 @@ export function simulatePipeline(instructions: string[]): PipelineState[] | neve
 
       for (let i = 0; i < totalInstructions; i++) {
         const instruction = instructions[i];
-        const fetch = fetchStarts[i];
-        const execute = executeStarts[i];
-        const isFlushed = branchIndex >= 0 && i > branchIndex && cycle > executeStarts[branchIndex];
-        if (isFlushed) continue;
-        if (cycle === fetch) stageMap.IF = instruction;
-        if (cycle > fetch && cycle < execute) stageMap.ID = instruction;
-        if (cycle === execute) stageMap.EX = instruction;
-        if (cycle === execute + 1) stageMap.MEM = instruction;
-        if (cycle === execute + 2) stageMap.WB = instruction;
-      }
-
-      if (branchIndex >= 0 && cycle === executeStarts[branchIndex] + 1) {
-        stageMap.IF = 'bubble(flush)';
-        stageMap.ID = 'bubble(flush)';
-      }
-      const stalledInstruction = normalizedInstructions.some((instruction, index) =>
-        cycle > fetchStarts[index]
-        && cycle < executeStarts[index]
-        && executeStarts[index] > fetchStarts[index] + 2,
-      );
-      if (stageMap.EX === undefined && stalledInstruction) {
-        stageMap.EX = 'bubble';
+        const instrStartCycle = i + 1;
+        const currStage = cycle - instrStartCycle;
+        if (currStage >= 0 && currStage < 5) {
+          const stage: PipelineStage = pipelinestates[currStage] as PipelineStage;
+          stageMap[stage] = instruction;
+        }
       }
 
       // if (cycle === 3) {
       //   console.log("Stage Map at cycle 3:", stageMap);
       // }
 
-      const normalizeStageInstruction = (instruction: string | undefined) =>
-        instruction && !instruction.startsWith('bubble')
-          ? instruction.replace(/\s*,\s*/g, ' ').trim().replace(/\s+/g, ' ')
-          : undefined;
-      const ifInstruction = normalizeStageInstruction(stageMap.IF);
-      const idInstruction = normalizeStageInstruction(stageMap.ID);
-      const exInstruction = normalizeStageInstruction(stageMap.EX);
-      const memInstruction = normalizeStageInstruction(stageMap.MEM);
-      const wbInstruction = normalizeStageInstruction(stageMap.WB);
+      const ifInstruction: string | undefined = stageMap['IF']?.replace(/\s*,\s*/g, ' ').trim().replace(/\s+/g, ' ');
+      const idInstruction: string | undefined = stageMap['ID']?.replace(/\s*,\s*/g, ' ').trim().replace(/\s+/g, ' ');
+      const exInstruction: string | undefined = stageMap['EX']?.replace(/\s*,\s*/g, ' ').trim().replace(/\s+/g, ' ');
+      const memInstruction: string | undefined = stageMap['MEM']?.replace(/\s*,\s*/g, ' ').trim().replace(/\s+/g, ' ');
+      const wbInstruction: string | undefined = stageMap['WB']?.replace(/\s*,\s*/g, ' ').trim().replace(/\s+/g, ' ');
 
       // console.log(idInstruction);
 
@@ -1494,24 +1399,14 @@ export function simulatePipeline(instructions: string[]): PipelineState[] | neve
       let excomponents: EXComponents | undefined = undefined;
       let memcomponents: MEMComponents | undefined = undefined;
 
-      if (ifInstruction && ifCommandType === CommandType.BType) {
+      if (ifInstruction) {
         ifpath = {
           branch_taken: false,
           mux_pc: true,
-          pc_increment: true,
+          pc_increment: true, 
           pc_default: true,
           pc_id: true,
-          pc_im: true,
-          im_id: true
-        };
-      } else if (ifInstruction) {
-        ifpath = {
-          branch_taken: false,
-          mux_pc: true,
-          pc_increment: true,
-          pc_default: true,
-          pc_id: false,
-          pc_im: true,
+          pc_im: true, 
           im_id: true
         };
       }
@@ -1521,7 +1416,7 @@ export function simulatePipeline(instructions: string[]): PipelineState[] | neve
         if (!writeRegister || !readRegister1 || !immediate) {
           throw new Error(`Follow the required format ${ifCommand} <writeRegister>, <readRegister1>, <immediate>`);
         }
-        ifcomponents = {
+        ifcomponents = { 
           pc: {
             value: 'pc + 4',
             comment: 'We move to the next instruction by incrementing PC by 4'
@@ -1540,7 +1435,7 @@ export function simulatePipeline(instructions: string[]): PipelineState[] | neve
           if (!writeRegister || !offsetAndBase) {
             throw new Error('Missing operands for I-type instruction');
           }
-          ifcomponents = {
+          ifcomponents = { 
             pc: {
               value: 'pc + 4',
               comment: 'We move to the next instruction by incrementing PC by 4'
@@ -1560,7 +1455,7 @@ export function simulatePipeline(instructions: string[]): PipelineState[] | neve
           }
           const offset = match[1];
           const baseRegister = match[2];
-          ifcomponents = {
+          ifcomponents = { 
             pc: {
               value: 'pc + 4',
               comment: 'Move to the next instruction',
@@ -1593,20 +1488,6 @@ export function simulatePipeline(instructions: string[]): PipelineState[] | neve
           default_adder: {
             value: "",
           }
-        };
-      }
-
-      if (ifCommandType === CommandType.UType && ifInstruction && ifCommand) {
-        ifcomponents = {
-          pc: {
-            value: 'pc + 4',
-            comment: 'We move to the next instruction by incrementing PC by 4'
-          },
-          instruction_mem: {
-            value: `command: ${ifInstruction}, instruction: ${ifCommand}`,
-            comment: 'Fetch the instruction from instruction memory using the current PC'
-          },
-          default_adder: { value: "" }
         };
       }
 
@@ -1660,7 +1541,7 @@ export function simulatePipeline(instructions: string[]): PipelineState[] | neve
         }
         idpath = {
           id_reg1: true,
-          id_ex: false,
+          id_ex: true,
           id_reg2: true,
           id_reg_write: true,
           id_imm_gen: false,
@@ -1731,7 +1612,7 @@ export function simulatePipeline(instructions: string[]): PipelineState[] | neve
         const baseRegister = match[2];
         idpath = {
           id_reg1: true,
-          id_reg2: true,
+          id_reg2: true, 
           id_imm_gen: true,
           reg1_ex: true,
           reg2_ex: true,
@@ -1768,7 +1649,7 @@ export function simulatePipeline(instructions: string[]): PipelineState[] | neve
           id_reg_write: true,
           id_imm_gen: true,
           imm_ex: true,
-          id_ex: false,
+          id_ex: true,
           reg1_ex: true,
           reg2_ex: false
         };
@@ -1796,7 +1677,6 @@ export function simulatePipeline(instructions: string[]): PipelineState[] | neve
           if (!writeRegister || !offsetAndBase) {
             throw new Error('Missing operands for I-type instruction');
           }
-
           idpath = {
             id_reg1: true,
             id_reg2: false,
@@ -1856,28 +1736,6 @@ export function simulatePipeline(instructions: string[]): PipelineState[] | neve
             }
           };
         }
-      }
-
-      if (idCommandType === CommandType.UType && idCommand && idInstruction) {
-        const [, writeRegister = '', immediate = ''] = idInstruction.split(' ');
-        idpath = {
-          id_reg1: false,
-          id_reg2: false,
-          id_reg_write: true,
-          id_imm_gen: true,
-          imm_ex: true,
-          id_ex: false,
-          reg1_ex: false,
-          reg2_ex: false
-        };
-        idcomponents = {
-          registers: {
-            read_register_1: { value: 'N/A', comment: 'Upper-immediate instructions do not read rs1' },
-            read_register_2: { value: 'N/A', comment: 'Upper-immediate instructions do not read rs2' },
-            write_register: { value: writeRegister, comment: 'write the shifted immediate to the destination register' }
-          },
-          imm_gen: { value: `Immediate: ${formatUpperImmediate(immediate)}` }
-        };
       }
 
       if (exCommandType === CommandType.RType && exCommand && exInstruction) {
@@ -1983,14 +1841,13 @@ export function simulatePipeline(instructions: string[]): PipelineState[] | neve
         if (!readRegister1 || !readRegister2 || !immediate) {
           throw new Error(`Follow the required format: ${exCommand} <readRegister1>, <readRegister2>, <immediate>`);
         }
-
         expath = {
           ex_add: true,
           add_mem: true,
           reg1_alu: true,
           reg2_mux: true,
           ex_shift: true,
-          zero_mem: true,
+          zero_mem: false,
           alu_mem: false,
           reg2_mem: false,
           ex_mux: false,
@@ -2000,25 +1857,6 @@ export function simulatePipeline(instructions: string[]): PipelineState[] | neve
           alu: {
             alu_result: `For branch instructions, the ALU performs the comparison between ${readRegister1} and ${readRegister2} to determine if the branch should be taken. In this case, it will perform ${exCommand} instruction`
           }
-        };
-      }
-
-      if (exCommandType === CommandType.UType && exCommand && exInstruction) {
-        const [, , immediate = ''] = exInstruction.split(' ');
-        expath = {
-          ex_add: false,
-          add_mem: false,
-          reg1_alu: false,
-          reg2_mux: false,
-          ex_shift: false,
-          ex_mux: true,
-          mux_alu: true,
-          reg2_mem: false,
-          zero_mem: false,
-          alu_mem: false
-        };
-        excomponents = {
-          alu: { alu_result: `Immediate: ${formatUpperImmediate(immediate)}` }
         };
       }
 
@@ -2049,7 +1887,7 @@ export function simulatePipeline(instructions: string[]): PipelineState[] | neve
         };
       }
 
-      if ((memCommand && memInstruction) && ((memCommandType === CommandType.RType && memInstruction) || (memCommandType === CommandType.UType && memInstruction) || (memCommandType === CommandType.IType && !memCommand.startsWith('l')) || (memCommandType === CommandType.IType && memCommand === 'li'))) {
+      if ((memCommand && memInstruction) && ((memCommandType === CommandType.RType && memInstruction) || (memCommandType === CommandType.IType && !memCommand.startsWith('l')) || (memCommandType === CommandType.IType && memCommand === 'li'))) {
         mempath = {
           zero_mem2: false,
           alu_dm: false,
@@ -2113,12 +1951,15 @@ export function simulatePipeline(instructions: string[]): PipelineState[] | neve
 
       if (memCommandType === CommandType.BType && memCommand && memInstruction) {
         mempath = {
-          zero_mem2: true,
+          zero_mem2: false,
           alu_dm: false,
           reg2_dm: false,
           dm_wb: false,
           alu_wb: false
         };
+        if (ifpath) {
+          ifpath.branch_taken = true;
+        }
         memcomponents = {
           data_memory: {
             read_data: 'N/A',
@@ -2127,7 +1968,7 @@ export function simulatePipeline(instructions: string[]): PipelineState[] | neve
         };
       }
 
-      if ((wbCommand && wbInstruction) && ((wbCommandType === CommandType.RType && wbInstruction) || (wbCommandType === CommandType.UType && wbInstruction) || (wbCommandType === CommandType.IType && !wbCommand.startsWith('l')) || (wbCommandType === CommandType.IType && wbCommand === 'li'))) {
+      if ((wbCommand && wbInstruction) && ((wbCommandType === CommandType.RType && wbInstruction) || (wbCommandType === CommandType.IType && !wbCommand.startsWith('l')) || (wbCommandType === CommandType.IType && wbCommand === 'li'))) {
         wbpath = {
           dm_mux: false,
           alu_mux: true,
@@ -2183,19 +2024,6 @@ export function simulatePipeline(instructions: string[]): PipelineState[] | neve
       hazards.push(...readRegisters
         .filter(reg => writeRegisters.includes(reg) && reg !== '')
         .map(reg => `Data hazard: Register ${reg} is read before it is written in this cycle.`));
-
-      if (branchIndex >= 0 && cycle === executeStarts[branchIndex] + 1) {
-        hazards.push('Control hazard: branch taken. Speculative instructions in ID and IF are flushed.');
-        ifpath = {
-          branch_taken: true,
-          mux_pc: true,
-          pc_increment: false,
-          pc_default: false,
-          pc_id: false,
-          pc_im: true,
-          im_id: true,
-        };
-      }
 
       pipelineStates.push({
         cycle,

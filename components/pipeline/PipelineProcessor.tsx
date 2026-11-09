@@ -4,34 +4,12 @@ import type {
   IFPath, IDPath, EXPath, MEMPath, WBPath,
   IFComponents, IDComponents, EXComponents, MEMComponents, PipelineState,
 } from "../../src/utils/pipeline-types";
-import type { SandboxCpuData } from "../../src/utils/sandbox-cpu-data";
-import {
-  BRANCH_INSTRUCTIONS,
-  IMMEDIATE_INSTRUCTIONS,
-  isConditionalBranch,
-  isStoreInstruction,
-  isUpperImmediateInstruction,
-  usesImmediateInstruction,
-} from "../../src/data/sandbox-instructions";
-import {
-  formatHex,
-  formatImmediate,
-  formatMemoryRead,
-  formatMemoryWrite,
-  formatUpperImmediate,
-  formatPipelineValue,
-} from "../../src/data/sandbox-messages";
-import { buildSandboxHoverMessage } from "../../src/data/sandbox-hover-messages";
-import { buildRegisterWriteDetails } from "../../src/data/sandbox-hover-messages";
 import PipelineDatapathSVG from "./PipelineDatapathSVG";
 
 type PipelineProcessorProps = {
   results: PipelineState[];
   currCycle: number;
   currentPreset: { index: number; note: string } | null;
-  cpuData?: SandboxCpuData;
-  instructionAddresses?: Record<string, number>;
-  branchTargets?: Record<string, number>;
 };
 
 const defaultIFPath: IFPath = {
@@ -63,7 +41,7 @@ const defaultIDComponents: IDComponents = {
   registers: {
     read_register_1: { value: "", comment: "" },
     read_register_2: { value: "", comment: "" },
-    write_register: { value: "", comment: "" },
+    write_register:  { value: "", comment: "" },
   },
 };
 const defaultEXComponents: EXComponents = { alu: { alu_result: "" } };
@@ -71,267 +49,143 @@ const defaultMEMComponents: MEMComponents = {
   data_memory: { read_data: "", write_data: "" },
 };
 
-function instructionParts(instruction: string) {
-  return instruction.replace(/,/g, " ").trim().split(/\s+/);
-}
-
-function registerOperands(instruction: string) {
-  const [mnemonic, ...operands] = instructionParts(instruction);
-  if (!mnemonic) return { mnemonic: "", rd: "", rs1: "", rs2: "", immediate: "" };
-
-  const isBranch = BRANCH_INSTRUCTIONS.includes(mnemonic as typeof BRANCH_INSTRUCTIONS[number]);
-  const isUpperImmediate = isUpperImmediateInstruction(mnemonic);
-  const usesImmediate = IMMEDIATE_INSTRUCTIONS.includes(mnemonic as typeof IMMEDIATE_INSTRUCTIONS[number]);
-  const memoryOperand = operands.find((operand) => /^\-?\d+\(x\d+\)$/.test(operand));
-  const memoryBase = memoryOperand?.match(/\((x\d+)\)/)?.[1] ?? "";
-  return {
-    mnemonic,
-    rd: isBranch ? "" : operands[0] ?? "",
-    rs1: isBranch || isUpperImmediate ? (isBranch ? operands[0] ?? "" : "") : memoryBase || operands[1] || "",
-    rs2: isBranch ? operands[1] ?? "" : usesImmediate || memoryOperand ? "" : operands[2] || "",
-    immediate: memoryOperand?.split("(")[0] ?? (isUpperImmediate ? operands[1] : operands[2]) ?? "",
-  };
-}
-
-function componentValue(value: string, fallback: string) {
-  return value && value !== "N/A" ? value : fallback;
-}
-
-function formatRegisterValue(value: string, register: string, registers?: readonly number[]) {
-  const registerNumber = Number(register.slice(1));
-  const liveValue = registers?.[registerNumber];
-  const normalized = liveValue === undefined
-    ? formatPipelineValue(componentValue(value, "N/A"))
-    : formatHex(liveValue);
-  return `${register} = ${normalized}`;
-}
-
-function registerValue(register: string, registers?: readonly number[]) {
-  return formatRegisterValue("", register, registers).split(" = ")[1];
-}
-
-function branchTaken(mnemonic: string, rs1: string, rs2: string, registers?: readonly number[]) {
-  const first = registers?.[Number(rs1.slice(1))];
-  const second = registers?.[Number(rs2.slice(1))];
-  if (first === undefined || second === undefined) return false;
-  const signedFirst = first | 0;
-  const signedSecond = second | 0;
-  return mnemonic === "beq" ? first === second
-    : mnemonic === "bne" ? first !== second
-      : mnemonic === "blt" ? signedFirst < signedSecond
-        : mnemonic === "bge" ? signedFirst >= signedSecond
-          : mnemonic === "bltu" ? first < second
-            : first >= second;
-}
-
-function formatMemoryDetails(
-  instruction: string,
-  readData: string,
-  writeData: string,
-  registers?: readonly number[],
-) {
-  const match = instructionParts(instruction).join(" ").match(/^(lw|sw) x(\d+) (-?\d+)\(x(\d+)\)$/i);
-  if (!match || !registers) return { readData, writeData };
-
-  const [, mnemonic, dataRegister, offsetText, baseRegister] = match;
-  const baseValue = registers[Number(baseRegister)];
-  if (baseValue === undefined) return { readData, writeData };
-
-  const address = (baseValue + Number(offsetText)) >>> 0;
-  return mnemonic.toLowerCase() === "lw"
-    ? { readData: formatMemoryRead(address), writeData: "No data written" }
-    : {
-      readData: "No data read",
-      writeData: formatMemoryWrite(registers[Number(dataRegister)] ?? 0, address),
-    };
-}
-
 function buildHoverText(
   label: string | null,
-  exPath: EXPath,
+  ifPath: IFPath, idPath: IDPath, exPath: EXPath, memPath: MEMPath, wbPath: WBPath,
   ifComp: IFComponents, idComp: IDComponents, exComp: EXComponents, memComp: MEMComponents,
   stageLabels: { IF?: string; ID?: string; EX?: string; MEM?: string; WB?: string },
-  hazards: string[], pcValue: number | null, registers?: readonly number[],
-  instructionAddresses?: Record<string, number>, branchTargets?: Record<string, number>,
+  hazards: string[],
 ): string | null {
-  const instruction = stageLabels.IF || stageLabels.ID || stageLabels.EX || stageLabels.MEM || stageLabels.WB;
-  const idInstruction = stageLabels.ID;
-  const exInstruction = stageLabels.EX;
-  const memInstruction = stageLabels.MEM;
-  const wbInstruction = stageLabels.WB;
-  const branchInstruction = [exInstruction, memInstruction]
-    .find((candidate) => candidate && isConditionalBranch(registerOperands(candidate).mnemonic));
-  const branchParts = branchInstruction ? registerOperands(branchInstruction) : null;
-  const idParts = idInstruction ? registerOperands(idInstruction) : null;
-  const exParts = exInstruction ? registerOperands(exInstruction) : null;
-  const wbParts = wbInstruction ? registerOperands(wbInstruction) : null;
-  const resolvedImmediate = branchParts
-    ? branchTargets?.[branchInstruction!] !== undefined
-      ? String(branchTargets[branchInstruction!] - (instructionAddresses?.[branchInstruction!] ?? 0))
-      : branchParts.immediate
-    : '';
-  const instructionAddress = instruction
-    ? instructionAddresses?.[instruction] ?? pcValue
-    : null;
-  const branchInstructionAddress = branchInstruction
-    ? instructionAddresses?.[branchInstruction] ?? pcValue
-    : null;
-  const branchValue = branchParts && branchInstructionAddress !== null
-    && branchInstructionAddress !== undefined && Number.isFinite(Number(resolvedImmediate))
-    ? `${formatHex(branchInstructionAddress)} + ${formatImmediate(resolvedImmediate)} = ${formatHex(branchInstructionAddress + Number(resolvedImmediate))}`
-    : exComp.branch_adder?.value;
-  const branchWasTaken = branchParts && branchInstructionAddress !== null
-    ? branchTaken(branchParts.mnemonic, branchParts.rs1, branchParts.rs2, registers)
-    : false;
-  const pcInstruction = stageLabels.IF || branchInstruction || instruction;
-  const pcAddress = stageLabels.IF
-    ? pcValue
-    : branchInstructionAddress;
-  const nextPc = branchWasTaken && branchInstructionAddress !== null && Number.isFinite(Number(resolvedImmediate))
-    ? branchInstructionAddress + Number(resolvedImmediate)
-    : pcAddress === null || pcAddress === undefined
-      ? undefined
-      : pcAddress + 4;
-  const memoryDetails = memInstruction && memComp.data_memory
-    ? formatMemoryDetails(
-      memInstruction,
-      memComp.data_memory.read_data,
-      memComp.data_memory.write_data,
-      registers,
-    )
-    : undefined;
+  if (!label) return null;
 
-  return buildSandboxHoverMessage(label, {
-    instruction,
-    pc: pcInstruction ? pcAddress : undefined,
-    pcNext: nextPc,
-    instructionAddress,
-    pcAdder: pcInstruction
-      ? pcAddress === null || pcAddress === undefined
-        ? formatPipelineValue(componentValue(ifComp.default_adder?.value ?? "", "PC + 4"))
-        : `${formatHex(pcAddress)} + 4 = ${formatHex(pcAddress + 4)}`
-      : undefined,
-    registerFile: idParts && idInstruction ? {
-      rs1: idParts.rs1,
-      rs2: idParts.rs2,
-      rd: idParts.rd,
-      read1: isUpperImmediateInstruction(idParts.mnemonic)
-        ? "N/A"
-        : registerValue(idParts.rs1 || "rs1", registers),
-      read2: idParts.rs2 ? registerValue(idParts.rs2, registers) : "N/A",
-      writeDetails: buildRegisterWriteDetails({
-        rd: idParts.rd,
-        mnemonic: idParts.mnemonic,
-        isLoad: idParts.mnemonic === "lw",
-        isStore: idParts.mnemonic === "sw",
-        isBranch: isConditionalBranch(idParts.mnemonic),
-        isUpperImmediate: isUpperImmediateInstruction(idParts.mnemonic),
-      }),
-      conditionalBranch: isConditionalBranch(idParts.mnemonic),
-    } : undefined,
-    immediateGenerator: idParts ? {
-      value: idComp.imm_gen?.value
-        || (usesImmediateInstruction(idParts.mnemonic)
-          ? `Immediate: ${formatImmediate(
-            branchTargets?.[idInstruction!] !== undefined
-              ? String(branchTargets[idInstruction!] - (instructionAddresses?.[idInstruction!] ?? 0))
-              : idParts.immediate,
-          )}`
-          : undefined),
-      usesImmediate: Boolean(idComp.imm_gen?.value) || usesImmediateInstruction(idParts.mnemonic),
-    } : undefined,
-    alu: exParts
-      ? isUpperImmediateInstruction(exParts.mnemonic)
-        ? `Immediate: ${formatUpperImmediate(exParts.immediate)}`
-        : formatPipelineValue(exComp.alu.alu_result?.match(/→\s*(.*)$/)?.[1]
-          ?? `${exParts.mnemonic.toUpperCase()} uses ${exParts.rs1 ? registerValue(exParts.rs1, registers) : "N/A"} and ${IMMEDIATE_INSTRUCTIONS.includes(exParts.mnemonic as typeof IMMEDIATE_INSTRUCTIONS[number])
-            ? formatImmediate(exParts.immediate)
-            : exParts.rs2 ? registerValue(exParts.rs2, registers) : "N/A"
-          }`)
-      : undefined,
-    branchAdder: branchParts ? {
-      value: branchValue,
-      usesBranch: true,
-    } : undefined,
-    aluInputMux: exParts
-      ? exPath.ex_mux
-        ? `Immediate: ${formatImmediate(resolvedImmediate)}`
-        : exParts.rs2 ? `${exParts.rs2} = ${registerValue(exParts.rs2, registers)}` : "N/A"
-      : undefined,
-    dataMemory: memInstruction ? {
-      readData: memoryDetails?.readData ?? memComp.data_memory.read_data,
-      writeData: memoryDetails?.writeData ?? memComp.data_memory.write_data,
-    } : undefined,
-    nextPcMux: pcInstruction
-      ? pcAddress === null || pcAddress === undefined
-        ? formatPipelineValue(ifComp.pc.value || "N/A")
-        : `PC ${formatHex(pcAddress)} → ${formatHex(nextPc ?? pcAddress + 4)}`
-      : undefined,
-    writeBackMux: wbInstruction
-      ? wbParts && isStoreInstruction(wbParts.mnemonic)
-        ? "N/A"
-        : wbParts?.rd ? `${wbParts.rd} ← result` : "N/A"
-      : undefined,
-    hazards,
-  });
+  switch (label) {
+    case "PC":
+      return `PC\n\n${ifComp.pc.comment || "N/A"}\n${ifComp.pc.value || "N/A"}`;
+
+    case "INSTRUCTION MEMORY":
+      return stageLabels.IF
+        ? `INSTRUCTION MEMORY\n\nFetching: ${stageLabels.IF}\n\n${ifComp.instruction_mem.comment || "N/A"}\n${ifComp.instruction_mem.value || "N/A"}`
+        : null;
+
+    case "ADD (PC + 4)":
+      return `ADD (PC + 4)\n\n${ifComp.default_adder?.value || "N/A"}`;
+
+    case "REGISTER FILE":
+      return stageLabels.ID
+        ? `REGISTER FILE\n\nDecoding: ${stageLabels.ID}\n\n` +
+          `${idComp.registers.read_register_1.comment || "N/A"}: ${idComp.registers.read_register_1.value || "N/A"}\n` +
+          `${idComp.registers.read_register_2.comment || "N/A"}: ${idComp.registers.read_register_2.value || "N/A"}\n` +
+          `${idComp.registers.write_register.comment  || "N/A"}: ${idComp.registers.write_register.value  || "N/A"}`
+        : null;
+
+    case "IMMEDIATE GENERATOR":
+      return stageLabels.ID
+        ? idPath.id_imm_gen
+          ? `IMMEDIATE GENERATOR\n\nFor ${stageLabels.ID}, sign-extends the immediate field.\n\n${idComp.imm_gen?.value ?? "N/A"}`
+          : `IMMEDIATE GENERATOR\n\n${stageLabels.ID} does not use an immediate — this unit is inactive.`
+        : null;
+
+    case "ALU":
+      return stageLabels.EX
+        ? `ALU\n\nExecuting: ${stageLabels.EX}\n\n${exComp.alu.alu_result || "N/A"}`
+        : null;
+
+    case "ADD (Branch Target)":
+      return stageLabels.EX
+        ? `ADD (Branch Target)\n\nFor ${stageLabels.EX}:\n${exComp.branch_adder?.value || "Not a branch instruction — branch adder inactive."}`
+        : null;
+
+    case "MUX (ALU Input)":
+      return stageLabels.EX
+        ? `MUX (ALU Input)\n\nFor ${stageLabels.EX}: ${
+            exPath.ex_mux
+              ? "ALUSrc=1 — selects the sign-extended immediate as the second ALU operand."
+              : "ALUSrc=0 — selects register data 2 as the second ALU operand."
+          }`
+        : null;
+
+    case "DATA MEMORY":
+      return stageLabels.MEM
+        ? `DATA MEMORY\n\nFor ${stageLabels.MEM}:\n${memComp.data_memory.read_data || "N/A"}\n\n${memComp.data_memory.write_data || "N/A"}`
+        : null;
+
+    case "MUX (Next PC)":
+      return stageLabels.IF
+        ? `MUX (Next PC)\n\n${
+            ifPath.branch_taken
+              ? "Branch taken — selecting branch target address as next PC."
+              : "No branch taken — selecting PC+4 as next PC."
+          }`
+        : null;
+
+    case "MUX (Write Back)":
+      return stageLabels.WB
+        ? `MUX (Write Back)\n\nFor ${stageLabels.WB}: ${
+            wbPath.dm_mux
+              ? "MemToReg=1 — writing data read from memory back to the register file."
+              : "MemToReg=0 — writing ALU result back to the register file."
+          }`
+        : null;
+
+    case "IF/ID":
+      return `IF/ID\n\nHolds the fetched instruction and program counter while the decode stage reads the fields.\nThis lets the next cycle begin ID without waiting for IF to finish.`;
+
+    case "ID/EX":
+      return `ID/EX\n\nCarries decoded register values, control signals, and immediate values into the execute stage.\nIt separates instruction decode from execution.`;
+
+    case "EX/MEM":
+      return `EX/MEM\n\nStores the ALU result, branch decision signals, and register data for the memory stage.\nIt separates execution from memory access.`;
+
+    case "MEM/WB":
+      return `MEM/WB\n\nHolds the value from data memory or the ALU result until the write-back stage writes it into the register file.`;
+
+    case "HAZARDS":
+      return `HAZARDS:\n${hazards.length ? hazards.join("\n") : "None"}`;
+
+    default:
+      return label;
+  }
 }
 
-export default function PipelineProcessor({
-  results, currCycle, currentPreset, cpuData, instructionAddresses, branchTargets,
-}: PipelineProcessorProps) {
+export default function PipelineProcessor({ results, currCycle, currentPreset }: PipelineProcessorProps) {
   const [activeBlock, setActiveBlock] = useState<string | null>(null);
   const arrowColour = "#ff0000";
-  const registers = cpuData
-    ? Array.from({ length: 32 }, (_, number) => cpuData.readRegister(number))
-    : undefined;
 
   const latestResult = results.length > 0 ? results[currCycle] : null;
 
-  const ifPath = latestResult?.stageDetails?.IF ?? defaultIFPath;
-  const idPath = latestResult?.stageDetails?.ID ?? defaultIDPath;
-  const exPath = latestResult?.stageDetails?.EX ?? defaultEXPath;
+  const ifPath  = latestResult?.stageDetails?.IF  ?? defaultIFPath;
+  const idPath  = latestResult?.stageDetails?.ID  ?? defaultIDPath;
+  const exPath  = latestResult?.stageDetails?.EX  ?? defaultEXPath;
   const memPath = latestResult?.stageDetails?.MEM ?? defaultMEMPath;
-  const wbPath = latestResult?.stageDetails?.WB ?? defaultWBPath;
+  const wbPath  = latestResult?.stageDetails?.WB  ?? defaultWBPath;
 
-  const ifComp = latestResult?.component?.IF ?? defaultIFComponents;
-  const idComp = latestResult?.component?.ID ?? defaultIDComponents;
-  const exComp = latestResult?.component?.EX ?? defaultEXComponents;
+  const ifComp  = latestResult?.component?.IF  ?? defaultIFComponents;
+  const idComp  = latestResult?.component?.ID  ?? defaultIDComponents;
+  const exComp  = latestResult?.component?.EX  ?? defaultEXComponents;
   const memComp = latestResult?.component?.MEM ?? defaultMEMComponents;
 
   const stageLabels = latestResult?.stages ?? {};
-  const hazards = latestResult?.hazards ?? [];
-  const fetchCycle = stageLabels.IF
-    ? results.findIndex((result) => result.stages.IF === stageLabels.IF)
-    : -1;
-  const pcValue = fetchCycle >= 0 ? fetchCycle * 4 : null;
-  const branchInstruction = stageLabels.MEM;
-  const branchParts = branchInstruction ? registerOperands(branchInstruction) : null;
-  const branchIsTaken = branchParts && isConditionalBranch(branchParts.mnemonic)
-    ? branchTaken(branchParts.mnemonic, branchParts.rs1, branchParts.rs2, registers)
-    : false;
-  const displayIFPath: IFPath = branchIsTaken
-    ? { ...ifPath, branch_taken: true, pc_default: false, pc_increment: false }
-    : ifPath;
+  const hazards     = latestResult?.hazards ?? [];
 
-  const getIFColour = (key: keyof IFPath) => displayIFPath[key] ? arrowColour : "#000000";
-  const getIDColour = (key: keyof IDPath) => idPath[key] ? arrowColour : "#000000";
-  const getEXColour = (key: keyof EXPath) => exPath[key] ? arrowColour : "#000000";
+  const getIFColour  = (key: keyof IFPath)  => ifPath[key]  ? arrowColour : "#000000";
+  const getIDColour  = (key: keyof IDPath)  => idPath[key]  ? arrowColour : "#000000";
+  const getEXColour  = (key: keyof EXPath)  => exPath[key]  ? arrowColour : "#000000";
   const getMEMColour = (key: keyof MEMPath) => memPath[key] ? arrowColour : "#000000";
-  const getWBColour = (key: keyof WBPath) => wbPath[key] ? arrowColour : "#000000";
+  const getWBColour  = (key: keyof WBPath)  => wbPath[key]  ? arrowColour : "#000000";
 
   const tooltipText = buildHoverText(
     activeBlock,
-    exPath,
+    ifPath, idPath, exPath, memPath, wbPath,
     ifComp, idComp, exComp, memComp,
-    stageLabels, hazards, pcValue, registers, instructionAddresses, branchTargets,
+    stageLabels, hazards,
   );
 
   const hoverContent = tooltipText
     ? React.createElement(
-      "div",
-      { xmlns: "http://www.w3.org/1999/xhtml", style: { fontSize: 12, whiteSpace: "pre-wrap", wordWrap: "break-word" } },
-      tooltipText
-    )
+        "div",
+        { xmlns: "http://www.w3.org/1999/xhtml", style: { fontSize: 12, whiteSpace: "pre-wrap", wordWrap: "break-word", color: "black", height: "150px", overflow: "auto", padding: "5px", marginRight: "10px" } },
+        tooltipText
+      )
     : undefined;
 
   return (
