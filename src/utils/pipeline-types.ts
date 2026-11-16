@@ -199,7 +199,7 @@ type PipelineState = {
   };
   hazards: string[];
   slots?: {
-    [stage in PipelineStage]?: { address: number; target?: number; taken?: boolean };
+    [stage in PipelineStage]?: { address: number; target?: number; taken?: boolean; representable?: boolean };
   };
 };
 

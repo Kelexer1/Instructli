@@ -8,9 +8,10 @@ import DatapathSVG from "./SandboxDatapathSVG";
 
 type SingleProcessorProps = {
   results: JsonResponse | null | undefined;
+  suppressHover?: boolean;
 };
 
-export default function SingleProcessor({ results }: SingleProcessorProps) {
+export default function SingleProcessor({ results, suppressHover = false }: SingleProcessorProps) {
   const [activeBlock, setActiveBlock] = useState<string | null>(null);
 
   const dp = results?.data_path ?? EMPTY_DATAPATH;
@@ -21,7 +22,7 @@ export default function SingleProcessor({ results }: SingleProcessorProps) {
   const getColour = (key: keyof DataPath): string =>
     active && dp[key] ? DATAPATH_COLORS.active : DATAPATH_COLORS.inactive;
 
-  const tooltipText = buildSandboxSingleCycleHoverText(activeBlock, bd);
+  const tooltipText = suppressHover ? null : buildSandboxSingleCycleHoverText(activeBlock, bd);
   const hoverContent = tooltipText
     ? React.createElement(
         "div",

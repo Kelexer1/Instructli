@@ -55,7 +55,10 @@ export function decodeInstruction(word: number): DecodedInstruction {
 
   switch (opcode) {
     case 0x33: return make('R', 0, [rs1, rs2], true);
-    case 0x13: return make('I', iImm, [rs1], true);
+    case 0x13: {
+      const funct3 = (raw >>> 12) & 0x7;
+      return make('I', funct3 === 1 || funct3 === 5 ? (raw >>> 20) & 0x1f : iImm, [rs1], true);
+    }
     case 0x03: return make('load', iImm, [rs1], true);
     case 0x23: return make('store', sImm, [rs1, rs2], false);
     case 0x63: return make('branch', bImm, [rs1, rs2], false);
@@ -82,4 +85,12 @@ export function evaluateBranch(raw: number, first: number, second: number): bool
     case 7: return first >>> 0 >= second >>> 0;
     default: return false;
   }
+}
+
+export function isRepresentable(kind: InstructionKind): boolean {
+  return kind === 'R' || kind === 'I' || kind === 'load' || kind === 'store' || kind === 'branch';
+}
+
+export function branchZeroFlag(raw: number, taken: boolean): boolean {
+  return ((raw >>> 12) & 0x7) === 0 ? taken : !taken;
 }

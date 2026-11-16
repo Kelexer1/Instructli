@@ -151,6 +151,19 @@ function formatMemoryDetails(
     };
 }
 
+const HOVER_STAGE: Record<string, (typeof PIPELINE_STAGES)[number] | undefined> = {
+  "INSTRUCTION MEMORY": "IF",
+  "ADD (PC + 4)": "IF",
+  "REGISTER FILE": "ID",
+  "IMMEDIATE GENERATOR": "ID",
+  ALU: "EX",
+  "MUX (ALU Input)": "EX",
+  "DATA MEMORY": "MEM",
+  "MUX (Write Back)": "WB",
+};
+
+const UNREPRESENTED_COLOUR = "#ca8a04";
+
 function buildHoverText(
   label: string | null,
   exPath: EXPath,
@@ -159,7 +172,10 @@ function buildHoverText(
   hazards: string[], pcValue: number | null, registers?: readonly number[],
   slots?: StageSlots,
 ): string | null {
-  const instruction = stageLabels.IF || stageLabels.ID || stageLabels.EX || stageLabels.MEM || stageLabels.WB;
+  const labelStage = label ? HOVER_STAGE[label] : undefined;
+  const instruction = labelStage
+    ? stageLabels[labelStage]
+    : stageLabels.IF || stageLabels.ID || stageLabels.EX || stageLabels.MEM || stageLabels.WB;
   const idInstruction = stageLabels.ID;
   const exInstruction = stageLabels.EX;
   const memInstruction = stageLabels.MEM;
@@ -305,11 +321,19 @@ export default function PipelineProcessor({
   const memComp = latestResult?.component?.MEM ?? defaultMEMComponents;
 
   const stageLabels = latestResult?.stages ?? {};
-  const hoverLabels = Object.fromEntries(
-    Object.entries(stageLabels).filter(([, label]) => label && !label.startsWith("bubble")),
-  ) as typeof stageLabels;
-  const hazards = latestResult?.hazards ?? [];
   const slots = latestResult?.slots;
+  const hoverLabels = Object.fromEntries(
+    Object.entries(stageLabels).filter(([stage, label]) => (
+      label
+      && !label.startsWith("bubble")
+      && slots?.[stage as (typeof PIPELINE_STAGES)[number]]?.representable !== false
+    )),
+  ) as typeof stageLabels;
+  const stageColors = Object.fromEntries(
+    PIPELINE_STAGES.filter((stage) => slots?.[stage]?.representable === false)
+      .map((stage) => [stage, UNREPRESENTED_COLOUR]),
+  ) as { IF?: string; ID?: string; EX?: string; MEM?: string; WB?: string };
+  const hazards = latestResult?.hazards ?? [];
   const pcValue = slots?.IF?.address ?? null;
 
   const getIFColour = (key: keyof IFPath) => ifPath[key] ? arrowColour : "#000000";
@@ -343,6 +367,7 @@ export default function PipelineProcessor({
       onBlockHover={setActiveBlock}
       hoverContent={hoverContent}
       stageLabels={stageLabels}
+      stageColors={stageColors}
       hazards={hazards}
       active={latestResult != null}
       activeStageColor="#ff0000"

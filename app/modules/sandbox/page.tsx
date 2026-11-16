@@ -11,12 +11,11 @@ import TerminalPane from '@/components/sandbox/TerminalPane';
 import MemoryPane from '@/components/sandbox/MemoryPane';
 import SingleProcessor from '@/components/sandbox/SandboxSingleCycle';
 import PipelineProcessor from '@/components/sandbox/SandboxPipelineProcessor';
-import { createSandboxSingleCycleSnapshot } from '@/src/utils/sandbox-single-cycle';
+import { createSandboxSingleCycleSnapshot, type SandboxSingleCycleSnapshot } from '@/src/utils/sandbox-single-cycle';
 import { PipelineBlockedError, PipelineEngine, type PipelineEnv, type PipelineSlot } from '@/src/utils/sandbox-pipeline-engine';
 import type { PipelineState } from '@/src/utils/pipeline-types';
 import { createSandboxCpuData } from '@/src/utils/sandbox-cpu-data';
 import type { SandboxCpuData } from '@/src/utils/sandbox-cpu-data';
-import type { JsonResponse } from '@/src/utils/single-processor';
 import { WindowTabs } from '@/components/WindowTabs';
 import {
   assembleWasm,
@@ -29,7 +28,6 @@ import {
   readWasmLastExecutedAddress,
   readWasmLastRaw,
   readWasmInstructionAt,
-  readWasmSymbolAddress,
   readWasmLastWrittenRegister,
   readWasmExitCode,
   readWasmProgramCounter,
@@ -67,7 +65,7 @@ export default function SandboxModule() {
     () => Array.from({ length: 32 }, (_, number) => ({ number, value: 0 })),
   );
   const [changedRegisters, setChangedRegisters] = useState<ReadonlySet<number>>(new Set());
-  const [singleCycleSnapshot, setSingleCycleSnapshot] = useState<JsonResponse | null>(null);
+  const [singleCycleSnapshot, setSingleCycleSnapshot] = useState<SandboxSingleCycleSnapshot | null>(null);
   const [pipelineResults, setPipelineResults] = useState<PipelineState[]>([]);
   const pipelineEngineRef = useRef<PipelineEngine | null>(null);
   const pipelineSteppingRef = useRef(false);
@@ -313,6 +311,10 @@ export default function SandboxModule() {
     setBusy(true);
     setStatus(null);
     try {
+      const stepping = action === stepWasm;
+      const startAddress = stepping ? await readWasmProgramCounter() : null;
+      const fetchedBefore = startAddress === null ? null : await readWasmInstructionAt(startAddress);
+      const registersBefore = stepping ? await readWasmRegisters() : null;
       const stopReason = await action();
       flushTerminalOutput();
       const executedAddress = await readWasmLastExecutedAddress();
@@ -327,19 +329,15 @@ export default function SandboxModule() {
       setRegisters(nextRegisters);
       setJustExecutedAddress(executedAddress);
       setNextAddress(currentAddress);
-      const executedInstruction = instructions.find(
-        (instruction) => instruction.address === executedAddress,
-      );
+      const executedRaw = await readWasmLastRaw();
+      const executedInstruction = fetchedBefore && fetchedBefore.raw === executedRaw && startAddress === executedAddress
+        ? fetchedBefore
+        : await readWasmInstructionAt(executedAddress);
       if (executedInstruction) {
-        const valuesUsed = action === stepWasm ? registers : nextRegisters;
-        const instructionTokens = executedInstruction.text.replace(/,/g, ' ').trim().split(/\s+/);
-        const branchTarget = instructionTokens[0]?.match(/^(beq|bne|blt|bge|bltu|bgeu)$/i)
-          ? await readWasmSymbolAddress(instructionTokens[3] ?? '')
-          : null;
+        const valuesUsed = registersBefore ?? nextRegisters;
         setSingleCycleSnapshot(
           createSandboxSingleCycleSnapshot(
-            executedInstruction.text,
-            executedAddress,
+            { text: executedInstruction.text, raw: executedRaw, address: executedAddress },
             currentAddress,
             createSandboxCpuData(
               valuesUsed.map((register) => register.value),
@@ -351,7 +349,7 @@ export default function SandboxModule() {
                 writeMemory: cpuData.writeMemory,
               },
             ),
-            branchTarget,
+            { registersAreFinal: !stepping },
           ),
         );
       }
@@ -556,7 +554,9 @@ export default function SandboxModule() {
                                   ? `Cycle ${pipelineResults[pipelineCycle]?.cycle ?? pipelineCycle + 1}; instructions are shown per logical stage.`
                                   : 'Execute an instruction to inspect the pipeline stages.'
                                 : singleCycleSnapshot?.block_data.instruction_mem.value
-                                  ? 'Last executed instruction; hover blocks for values.'
+                                  ? singleCycleSnapshot.approximate
+                                  ? 'Last executed instruction. Register values are from after the run, so operands this instruction also overwrote may differ.'
+                                  : 'Last executed instruction; hover blocks for values.'
                                   : 'No instruction executed.'}
                             </p>
                           </div>
@@ -592,24 +592,21 @@ export default function SandboxModule() {
                           />
                         ) : (() => {
                           const instruction = singleCycleSnapshot?.block_data.instruction_mem.value ?? null;
-                          const isUnsupported = singleCycleSnapshot !== null
-                            && ['jal', 'jalr', 'ecall', 'ebreak', 'fence', 'fence.i'].includes(
-                              singleCycleSnapshot.command_type,
-                            );
+                          const unrepresented = singleCycleSnapshot !== null && !singleCycleSnapshot.representable;
 
                           return (
                             <>
                               {instruction && (
-                                <p className="mb-2 text-center font-mono text-sm font-semibold text-gray-700">
+                                <p className={`mb-2 text-center font-mono text-sm font-semibold ${unrepresented ? 'text-yellow-600' : 'text-gray-700'}`}>
                                   {instruction}
                                 </p>
                               )}
-                              {isUnsupported && (
-                                <p className="mb-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-center text-xs text-amber-800">
-                                  This instruction cannot be fully represented by the single-cycle CPU diagram.
+                              {unrepresented && (
+                                <p className="mb-2 rounded border border-yellow-200 bg-yellow-50 px-3 py-2 text-center text-xs text-yellow-800">
+                                  This instruction has no representation in the single-cycle CPU diagram.
                                 </p>
                               )}
-                              <SingleProcessor results={isUnsupported ? null : singleCycleSnapshot} />
+                              <SingleProcessor results={singleCycleSnapshot} suppressHover={unrepresented} />
                             </>
                           );
                         })()}

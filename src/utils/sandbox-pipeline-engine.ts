@@ -1,6 +1,8 @@
 import { PIPELINE_STAGES } from '@/src/data/sandbox-instructions';
 import { formatHex } from '@/src/data/sandbox-messages';
-import { decodeInstruction, evaluateBranch, type DecodedInstruction } from '@/src/utils/sandbox-decode';
+import {
+  branchZeroFlag, decodeInstruction, evaluateBranch, isRepresentable, type DecodedInstruction,
+} from '@/src/utils/sandbox-decode';
 import type {
   EXPath, IDPath, IFPath, MEMPath, PipelineState, WBPath,
 } from '@/src/utils/pipeline-types';
@@ -14,6 +16,7 @@ export interface PipelineSlot {
   text: string;
   decoded: DecodedInstruction;
   taken?: boolean;
+  zero?: boolean;
   target?: number;
 }
 
@@ -68,7 +71,7 @@ function findDependency(latches: Record<PipelineStageName, Latch>) {
 }
 
 function ifPath(slot: PipelineSlot | undefined, redirected: boolean): IFPath {
-  const control = slot ? isRedirect(slot) : false;
+  const control = slot ? slot.decoded.kind === 'branch' : false;
   return {
     branch_taken: redirected,
     mux_pc: true,
@@ -89,42 +92,30 @@ function idPath(kind: DecodedInstruction['kind']): IDPath {
     case 'R': return { ...base, id_reg1: true, id_reg2: true, id_reg_write: true, reg1_ex: true, reg2_ex: true };
     case 'I':
     case 'load':
-    case 'jalr':
       return { ...base, id_reg1: true, id_reg_write: true, id_imm_gen: true, imm_ex: true, reg1_ex: true };
     case 'store':
       return { ...base, id_reg1: true, id_reg2: true, id_imm_gen: true, imm_ex: true, reg1_ex: true, reg2_ex: true };
     case 'branch':
       return { ...base, id_reg1: true, id_reg2: true, id_imm_gen: true, imm_ex: true, id_ex: true, reg1_ex: true, reg2_ex: true };
-    case 'jal':
-      return { ...base, id_reg_write: true, id_imm_gen: true, imm_ex: true, id_ex: true };
-    case 'lui':
-    case 'auipc':
-      return { ...base, id_reg_write: true, id_imm_gen: true, imm_ex: true };
     default:
       return base;
   }
 }
 
-function exPath(kind: DecodedInstruction['kind']): EXPath {
+function exPath(slot: PipelineSlot): EXPath {
   const base: EXPath = {
     ex_add: false, add_mem: false, reg1_alu: false, reg2_mux: false, ex_shift: false,
     ex_mux: false, mux_alu: false, reg2_mem: false, zero_mem: false, alu_mem: false,
   };
-  switch (kind) {
+  switch (slot.decoded.kind) {
     case 'R': return { ...base, reg1_alu: true, reg2_mux: true, mux_alu: true, alu_mem: true };
     case 'I':
     case 'load':
-    case 'jalr':
       return { ...base, reg1_alu: true, ex_mux: true, mux_alu: true, alu_mem: true };
     case 'store':
       return { ...base, reg1_alu: true, ex_mux: true, mux_alu: true, reg2_mem: true, alu_mem: true };
     case 'branch':
-      return { ...base, ex_add: true, add_mem: true, reg1_alu: true, reg2_mux: true, ex_shift: true, mux_alu: true, zero_mem: true };
-    case 'jal':
-      return { ...base, ex_add: true, add_mem: true, ex_shift: true };
-    case 'lui':
-    case 'auipc':
-      return { ...base, ex_mux: true, mux_alu: true };
+      return { ...base, ex_add: true, add_mem: true, reg1_alu: true, reg2_mux: true, ex_shift: true, mux_alu: true, zero_mem: slot.zero === true };
     default:
       return base;
   }
@@ -135,26 +126,21 @@ function memPath(slot: PipelineSlot): MEMPath {
   switch (slot.decoded.kind) {
     case 'load': return { ...base, alu_dm: true, dm_wb: true };
     case 'store': return { ...base, alu_dm: true, reg2_dm: true };
-    case 'branch': return { ...base, zero_mem2: slot.taken === true };
-    case 'jal': return base;
-    case 'system':
-    case 'fence':
-    case 'unknown':
-      return base;
-    default: return { ...base, alu_wb: true };
+    case 'branch': return { ...base, zero_mem2: slot.zero === true };
+    case 'R':
+    case 'I':
+      return { ...base, alu_wb: true };
+    default: return base;
   }
 }
 
 function wbPath(kind: DecodedInstruction['kind']): WBPath {
   switch (kind) {
     case 'load': return { dm_mux: true, alu_mux: false, reg_write: true };
-    case 'store':
-    case 'branch':
-    case 'system':
-    case 'fence':
-    case 'unknown':
-      return { dm_mux: false, alu_mux: false, reg_write: false };
-    default: return { dm_mux: false, alu_mux: true, reg_write: true };
+    case 'R':
+    case 'I':
+      return { dm_mux: false, alu_mux: true, reg_write: true };
+    default: return { dm_mux: false, alu_mux: false, reg_write: false };
   }
 }
 
@@ -237,6 +223,7 @@ export class PipelineEngine {
       const { decoded } = slot;
       if (decoded.kind === 'branch') {
         slot.taken = evaluateBranch(decoded.raw, registers[decoded.rs1] ?? 0, registers[decoded.rs2] ?? 0);
+        slot.zero = branchZeroFlag(decoded.raw, slot.taken);
         slot.target = (slot.address + decoded.imm) >>> 0;
       } else if (decoded.kind === 'jal') {
         slot.taken = true;
@@ -338,8 +325,10 @@ export class PipelineEngine {
         continue;
       }
       stages[stage] = latch.text;
-      slots[stage] = { address: latch.address, target: latch.target, taken: latch.taken };
       const { decoded } = latch;
+      const representable = isRepresentable(decoded.kind);
+      slots[stage] = { address: latch.address, target: latch.target, taken: latch.taken, representable };
+      if (!representable) continue;
       switch (stage) {
         case 'IF':
           stageDetails.IF = ifPath(latch, false);
@@ -357,15 +346,13 @@ export class PipelineEngine {
               read_register_2: { value: decoded.kind === 'R' || decoded.kind === 'store' || decoded.kind === 'branch' ? `x${decoded.rs2}` : 'N/A', comment: '' },
               write_register: { value: decoded.writes !== null ? `x${decoded.writes}` : 'N/A', comment: '' },
             },
-            ...(decoded.kind !== 'R' && decoded.kind !== 'system' && decoded.kind !== 'fence' && decoded.kind !== 'unknown'
-              ? { imm_gen: { value: `Immediate: ${formatHex(decoded.imm)}` } }
-              : {}),
+            ...(decoded.kind !== 'R' ? { imm_gen: { value: `Immediate: ${formatHex(decoded.imm)}` } } : {}),
           };
           break;
         case 'EX':
-          stageDetails.EX = exPath(decoded.kind);
+          stageDetails.EX = exPath(latch);
           component.EX = { alu: { alu_result: '' } };
-          if (latch.target !== undefined && decoded.kind !== 'jalr') {
+          if (latch.target !== undefined && decoded.kind === 'branch') {
             component.EX.branch_adder = {
               value: `${formatHex(latch.address)} + ${formatHex(decoded.imm)} = ${formatHex(latch.target)}`,
             };
@@ -386,7 +373,7 @@ export class PipelineEngine {
       }
     }
 
-    if (redirected && isInst(resolving)) {
+    if (redirected && isInst(resolving) && resolving.decoded.kind === 'branch') {
       stageDetails.IF = ifPath(undefined, true);
       component.IF = {
         pc: { value: `PC = ${formatHex(resolving.target ?? 0)}`, comment: '' },

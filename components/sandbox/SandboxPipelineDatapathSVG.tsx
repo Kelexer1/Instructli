@@ -2,11 +2,11 @@ import React from "react";
 import type { IFPath, IDPath, EXPath, MEMPath, WBPath } from "../../src/utils/pipeline-types";
 
 type PipelineDatapathSVGProps = {
-  getIFColour:  (key: keyof IFPath)  => string;
-  getIDColour:  (key: keyof IDPath)  => string;
-  getEXColour:  (key: keyof EXPath)  => string;
+  getIFColour: (key: keyof IFPath) => string;
+  getIDColour: (key: keyof IDPath) => string;
+  getEXColour: (key: keyof EXPath) => string;
   getMEMColour: (key: keyof MEMPath) => string;
-  getWBColour:  (key: keyof WBPath)  => string;
+  getWBColour: (key: keyof WBPath) => string;
   onBlockHover?: (label: string | null) => void;
   hoverContent?: React.ReactElement;
   stageLabels?: { IF?: string; ID?: string; EX?: string; MEM?: string; WB?: string };
@@ -19,11 +19,11 @@ type PipelineDatapathSVGProps = {
   stageColors?: { IF?: string; ID?: string; EX?: string; MEM?: string; WB?: string };
   analysisText?: string;
   // click handlers for quiz mode
-  onSegmentClickIF?:  (key: keyof IFPath)  => void;
-  onSegmentClickID?:  (key: keyof IDPath)  => void;
-  onSegmentClickEX?:  (key: keyof EXPath)  => void;
+  onSegmentClickIF?: (key: keyof IFPath) => void;
+  onSegmentClickID?: (key: keyof IDPath) => void;
+  onSegmentClickEX?: (key: keyof EXPath) => void;
   onSegmentClickMEM?: (key: keyof MEMPath) => void;
-  onSegmentClickWB?:  (key: keyof WBPath)  => void;
+  onSegmentClickWB?: (key: keyof WBPath) => void;
 };
 
 export default function PipelineDatapathSVG({
@@ -55,13 +55,13 @@ export default function PipelineDatapathSVG({
   const unhover = () => onBlockHover?.(null);
 
   // seg helpers: wrap a path in a clickable <g> when a handler is provided
-  const segIF  = (key: keyof IFPath)  => onSegmentClickIF  ? { onClick: () => onSegmentClickIF(key),  style: { cursor: "pointer" } } : {};
-  const segID  = (key: keyof IDPath)  => onSegmentClickID  ? { onClick: () => onSegmentClickID(key),  style: { cursor: "pointer" } } : {};
-  const segEX  = (key: keyof EXPath)  => onSegmentClickEX  ? { onClick: () => onSegmentClickEX(key),  style: { cursor: "pointer" } } : {};
+  const segIF = (key: keyof IFPath) => onSegmentClickIF ? { onClick: () => onSegmentClickIF(key), style: { cursor: "pointer" } } : {};
+  const segID = (key: keyof IDPath) => onSegmentClickID ? { onClick: () => onSegmentClickID(key), style: { cursor: "pointer" } } : {};
+  const segEX = (key: keyof EXPath) => onSegmentClickEX ? { onClick: () => onSegmentClickEX(key), style: { cursor: "pointer" } } : {};
   const segMEM = (key: keyof MEMPath) => onSegmentClickMEM ? { onClick: () => onSegmentClickMEM(key), style: { cursor: "pointer" } } : {};
-  const segWB  = (key: keyof WBPath)  => onSegmentClickWB  ? { onClick: () => onSegmentClickWB(key),  style: { cursor: "pointer" } } : {};
+  const segWB = (key: keyof WBPath) => onSegmentClickWB ? { onClick: () => onSegmentClickWB(key), style: { cursor: "pointer" } } : {};
 
-  const hazardsWidth  = 80;
+  const hazardsWidth = 80;
   const hazardsHeight = 24;
   const fontSize = 14;
   const svgWidth = 910;
@@ -110,11 +110,11 @@ export default function PipelineDatapathSVG({
         style={{ overflow: "visible", position: "relative", zIndex: 10 }}
       >
         {clickableStages && Object.entries({
-          IF:  [-10, 259.758],
-          ID:  [283.2967, 465.67],
-          EX:  [489.2087, 653.444],
+          IF: [-10, 259.758],
+          ID: [283.2967, 465.67],
+          EX: [489.2087, 653.444],
           MEM: [676.9827, 828.415],
-          WB:  [851.9537, 975],
+          WB: [851.9537, 975],
         } as Record<"IF" | "ID" | "EX" | "MEM" | "WB", [number, number]>).map(([stage, [x0, x1]]) =>
           clickableStages.has(stage as "IF" | "ID" | "EX" | "MEM" | "WB") ? (
             <rect
@@ -132,7 +132,7 @@ export default function PipelineDatapathSVG({
 
         {/* INSTRUCTION MEMORY BOX */}
         <g onMouseEnter={() => hover("INSTRUCTION MEMORY")} onMouseLeave={unhover}>
-          <rect x="112.526" y="245.576" width="107.824" height="148.929" stroke="black"/>
+          <rect x="112.526" y="245.576" width="107.824" height="148.929" stroke="black" />
           <text fill="black" xmlSpace="preserve" style={{ whiteSpace: "pre" }} fontSize="10" fontWeight="500" letterSpacing="0em"><tspan x="117.361" y="256.154">Address</tspan></text>
           <text fill="black" xmlSpace="preserve" style={{ whiteSpace: "pre" }} fontSize="10" fontWeight="500" letterSpacing="0em"><tspan x="138.699" y="310.936">Instruction</tspan><tspan x="138.699" y="322.936">   memory</tspan></text>
           <text transform="matrix(0 -1 1 0 283.797 312.833)" fill="black" xmlSpace="preserve" style={{ whiteSpace: "pre" }} fontSize="8" fontWeight="500" letterSpacing="0em"><tspan x="35.2655" y="7.90909">Instruction</tspan></text>
@@ -180,7 +180,7 @@ export default function PipelineDatapathSVG({
 
         {/* PC BOX */}
         <g onMouseEnter={() => hover("PC")} onMouseLeave={unhover}>
-          <rect x="63.4487" y="222.51" width="21.4049" height="66.7564" stroke="black"/>
+          <rect x="63.4487" y="222.51" width="21.4049" height="66.7564" stroke="black" />
           <text fill="black" xmlSpace="preserve" style={{ whiteSpace: "pre" }} fontSize="10" fontWeight="500" letterSpacing="0em"><tspan x="66.1494" y="257.596">PC</tspan></text>
         </g>
 
@@ -223,7 +223,7 @@ export default function PipelineDatapathSVG({
 
         {/* DATA MEMORY BOX */}
         <g onMouseEnter={() => hover("DATA MEMORY")} onMouseLeave={unhover}>
-          <rect x="705.722" y="287.384" width="105.69" height="147.487" stroke="black"/>
+          <rect x="705.722" y="287.384" width="105.69" height="147.487" stroke="black" />
           <text id="Address_2" fill="black" xmlSpace="preserve" style={{ whiteSpace: "pre" }} fontSize="10" fontWeight="500" letterSpacing="0em"><tspan x="710.556" y="325.352">Address</tspan></text>
           <text id="Data Memory_3" fill="black" xmlSpace="preserve" style={{ whiteSpace: "pre" }} fontSize="10" fontWeight="500" letterSpacing="0em"><tspan x="746.871" y="355.626">Data&#10;</tspan><tspan x="738.414" y="367.626">memory</tspan></text>
           <text id="Read Data" fill="black" xmlSpace="preserve" style={{ whiteSpace: "pre" }} fontSize="10" fontWeight="500" letterSpacing="0em"><tspan x="783.445" y="315.261">Read&#10;</tspan><tspan x="786.277" y="327.261">data</tspan></text>
@@ -244,7 +244,7 @@ export default function PipelineDatapathSVG({
 
         {/* REGISTERS BOX */}
         <g onMouseEnter={() => hover("REGISTER FILE")} onMouseLeave={unhover}>
-          <rect x="322.705" y="244.135" width="106.757" height="150.371" stroke="black"/>
+          <rect x="322.705" y="244.135" width="106.757" height="150.371" stroke="black" />
           <text fill="black" xmlSpace="preserve" style={{ whiteSpace: "pre" }} fontSize="10" fontWeight="500" letterSpacing="0em"><tspan x="327.54" y="257.596">Read &#10;</tspan><tspan x="327.54" y="269.596">register 1</tspan></text>
           <text fill="black" xmlSpace="preserve" style={{ whiteSpace: "pre" }} fontSize="10" fontWeight="500" letterSpacing="0em"><tspan x="327.54" y="290.753">Read &#10;</tspan><tspan x="327.54" y="302.753">register 2</tspan></text>
           <text fill="black" xmlSpace="preserve" style={{ whiteSpace: "pre" }} fontSize="10" fontWeight="500" letterSpacing="0em"><tspan x="327.54" y="335.444">Write &#10;</tspan><tspan x="327.54" y="347.444">register</tspan></text>
@@ -291,7 +291,7 @@ export default function PipelineDatapathSVG({
 
         {/* SHIFT LEFT BOX */}
         <g id="Shift Left">
-          <path d="M508.707 141.779C513.055 141.779 517.147 145.565 520.18 152.047C523.194 158.489 525.073 167.424 525.073 177.32C525.072 187.216 523.194 196.151 520.18 202.593C517.147 209.075 513.056 212.86 508.707 212.86C504.359 212.86 500.268 209.075 497.235 202.593C494.22 196.151 492.342 187.216 492.342 177.32C492.342 167.424 494.22 158.489 497.235 152.047C500.268 145.565 504.359 141.779 508.707 141.779Z" stroke="black"/>
+          <path d="M508.707 141.779C513.055 141.779 517.147 145.565 520.18 152.047C523.194 158.489 525.073 167.424 525.073 177.32C525.072 187.216 523.194 196.151 520.18 202.593C517.147 209.075 513.056 212.86 508.707 212.86C504.359 212.86 500.268 209.075 497.235 202.593C494.22 196.151 492.342 187.216 492.342 177.32C492.342 167.424 494.22 158.489 497.235 152.047C500.268 145.565 504.359 141.779 508.707 141.779Z" stroke="black" />
           <text fill="black" xmlSpace="preserve" style={{ whiteSpace: "pre" }} fontSize="10" fontWeight="500" letterSpacing="0em"><tspan x="497.075" y="168.936">Shift&#10;</tspan><tspan x="496.679" y="180.936">left 1</tspan><tspan x="496.679" y="192.936">bit</tspan></text>
         </g>
 
@@ -304,12 +304,12 @@ export default function PipelineDatapathSVG({
 
         {/* IMM GEN BOX */}
         <g id="Imm Gen" onMouseEnter={() => hover("IMMEDIATE GENERATOR")} onMouseLeave={unhover}>
-          <path d="M408.091 418.571C413.521 418.571 418.598 423.398 422.346 431.58C426.075 439.719 428.395 450.998 428.395 463.482C428.395 475.967 426.075 487.246 422.346 495.385C418.598 503.567 413.521 508.393 408.091 508.394C402.66 508.394 397.582 503.567 393.834 495.385C390.105 487.246 387.786 475.967 387.786 463.482C387.786 450.998 390.105 439.719 393.834 431.58C397.582 423.398 402.66 418.571 408.091 418.571Z" stroke="black"/>
+          <path d="M408.091 418.571C413.521 418.571 418.598 423.398 422.346 431.58C426.075 439.719 428.395 450.998 428.395 463.482C428.395 475.967 426.075 487.246 422.346 495.385C418.598 503.567 413.521 508.393 408.091 508.394C402.66 508.394 397.582 503.567 393.834 495.385C390.105 487.246 387.786 475.967 387.786 463.482C387.786 450.998 390.105 439.719 393.834 431.58C397.582 423.398 402.66 418.571 408.091 418.571Z" stroke="black" />
           <text fill="black" xmlSpace="preserve" style={{ whiteSpace: "pre" }} fontSize="10" fontWeight="500" letterSpacing="0em"><tspan x="398.438" y="460.865">Imm&#10;</tspan><tspan x="398.956" y="472.865">Gen</tspan></text>
           <text id="32" fill="black" xmlSpace="preserve" style={{ whiteSpace: "pre" }} fontSize="10" fontWeight="500" letterSpacing="0em"><tspan x="356.992" y="449.332">32</tspan></text>
           <text id="64" fill="black" xmlSpace="preserve" style={{ whiteSpace: "pre" }} fontSize="10" fontWeight="500" letterSpacing="0em"><tspan x="431.513" y="449.332">32</tspan></text>
-          <line id="slash" y1="-0.5" x2="16.2351" y2="-0.5" transform="matrix(0.255758 0.966741 -0.681045 0.732241 440.631 456.995)" stroke="black"/>
-          <line id="slash" y1="-0.5" x2="15.6137" y2="-0.5" transform="matrix(0.320965 0.947091 -0.765958 0.642891 365.948 458.437)" stroke="black"/>
+          <line id="slash" y1="-0.5" x2="16.2351" y2="-0.5" transform="matrix(0.255758 0.966741 -0.681045 0.732241 440.631 456.995)" stroke="black" />
+          <line id="slash" y1="-0.5" x2="15.6137" y2="-0.5" transform="matrix(0.320965 0.947091 -0.765958 0.642891 365.948 458.437)" stroke="black" />
         </g>
 
         {/* Imm Gen Lines */}
@@ -332,7 +332,7 @@ export default function PipelineDatapathSVG({
 
         {/* MUX 3 BOX */}
         <g id="Mux 3" onMouseEnter={() => hover("MUX (Write Back)")} onMouseLeave={unhover}>
-          <rect x="876.426" y="309.008" width="22.4718" height="79.731" rx="11.2359" stroke="black"/>
+          <rect x="876.426" y="309.008" width="22.4718" height="79.731" rx="11.2359" stroke="black" />
           <text fill="black" xmlSpace="preserve" style={{ whiteSpace: "pre" }} fontSize="10" fontWeight="500" letterSpacing="0em"><tspan x="886.375" y="338.327">M&#10;</tspan><tspan x="887.888" y="350.327">u&#10;</tspan><tspan x="888.108" y="362.327">x</tspan></text>
           <text fill="black" xmlSpace="preserve" style={{ whiteSpace: "pre" }} fontSize="10" fontWeight="500" letterSpacing="0em"><tspan x="880.7" y="380.134">0</tspan></text>
           <text fill="black" xmlSpace="preserve" style={{ whiteSpace: "pre" }} fontSize="10" fontWeight="500" letterSpacing="0em"><tspan x="881.564" y="325.352">1</tspan></text>
@@ -347,7 +347,7 @@ export default function PipelineDatapathSVG({
 
         {/* MUX 2 BOX */}
         <g id="Mux 2" onMouseEnter={() => hover("MUX (ALU Input)")} onMouseLeave={unhover}>
-          <rect x="524.349" y="316.216" width="22.4718" height="82.6143" rx="11.2359" stroke="black"/>
+          <rect x="524.349" y="316.216" width="22.4718" height="82.6143" rx="11.2359" stroke="black" />
           <text fill="black" xmlSpace="preserve" style={{ whiteSpace: "pre" }} fontSize="10" fontWeight="500" letterSpacing="0em"><tspan x="534.298" y="345.535">M&#10;</tspan><tspan x="535.812" y="357.535">u&#10;</tspan><tspan x="536.032" y="369.535">x</tspan></text>
           <text fill="black" xmlSpace="preserve" style={{ whiteSpace: "pre" }} fontSize="10" fontWeight="500" letterSpacing="0em"><tspan x="530.021" y="383.017">1</tspan></text>
           <text fill="black" xmlSpace="preserve" style={{ whiteSpace: "pre" }} fontSize="10" fontWeight="500" letterSpacing="0em"><tspan x="529.157" y="331.118">0</tspan></text>
@@ -362,7 +362,7 @@ export default function PipelineDatapathSVG({
 
         {/* MUX 1 BOX */}
         <g id="Mux 1" onMouseEnter={() => hover("MUX (Next PC)")} onMouseLeave={unhover}>
-          <rect x="26.1074" y="212.418" width="21.4049" height="86.9391" rx="10.7024" stroke="black"/>
+          <rect x="26.1074" y="212.418" width="21.4049" height="86.9391" rx="10.7024" stroke="black" />
           <text fill="black" xmlSpace="preserve" style={{ whiteSpace: "pre" }} fontSize="10" fontWeight="500" letterSpacing="0em"><tspan x="36.5901" y="246.063">M&#10;</tspan><tspan x="38.1038" y="258.063">u&#10;</tspan><tspan x="38.3235" y="270.063">x</tspan></text>
           <text fill="black" xmlSpace="preserve" style={{ whiteSpace: "pre" }} fontSize="10" fontWeight="500" letterSpacing="0em"><tspan x="31.2459" y="283.545">1</tspan></text>
           <text fill="black" xmlSpace="preserve" style={{ whiteSpace: "pre" }} fontSize="10" fontWeight="500" letterSpacing="0em"><tspan x="30.3816" y="227.322">0</tspan></text>
@@ -377,8 +377,8 @@ export default function PipelineDatapathSVG({
 
         {/* ALU BOX */}
         <g onMouseEnter={() => hover("ALU")} onMouseLeave={unhover}>
-          <rect x={569.5} y={257} width={57} height={112.5} stroke="transparent"/>
-          <path d="M569.822 256.61V303.17M569.822 322.496V369.056M569.726 302.891L577.396 312.555M577.407 312.218L569.737 322.76M570.023 368.683L626.271 332.665M570.023 256.983L626.271 293.001M626.07 292.628V333.038" stroke="black"/>
+          <rect x={569.5} y={257} width={57} height={112.5} stroke="transparent" />
+          <path d="M569.822 256.61V303.17M569.822 322.496V369.056M569.726 302.891L577.396 312.555M577.407 312.218L569.737 322.76M570.023 368.683L626.271 332.665M570.023 256.983L626.271 293.001M626.07 292.628V333.038" stroke="black" />
           <text fill="black" xmlSpace="preserve" style={{ whiteSpace: "pre" }} fontSize="10" fontWeight="500" letterSpacing="0em"><tspan x="578.387" y="310.936">ALU</tspan></text>
           <text fill="black" xmlSpace="preserve" style={{ whiteSpace: "pre" }} fontSize="10" fontWeight="500" letterSpacing="0em"><tspan x="600.906" y="296.52">Zero</tspan></text>
           <text fill="black" xmlSpace="preserve" style={{ whiteSpace: "pre" }} fontSize="8" fontWeight="500" letterSpacing="0em"><tspan x="605.988" y="316.417">ALU </tspan><tspan x="598.191" y="326.417">Result</tspan></text>
@@ -421,8 +421,8 @@ export default function PipelineDatapathSVG({
 
         {/* ADD 2 BOX */}
         <g id="Add 2" onMouseEnter={() => hover("ADD (Branch Target)")} onMouseLeave={unhover}>
-          <rect x={550} y={108} width={57} height={112.5} stroke="transparent"/>
-          <path d="M550.603 108.122V145.728M550.603 161.338V198.944M550.521 145.503L557.034 153.308M557.043 153.036L550.531 161.551M550.774 198.643L598.532 169.551M550.774 108.423L598.532 137.515M598.361 137.213V169.853" stroke="black"/>
+          <rect x={550} y={108} width={57} height={112.5} stroke="transparent" />
+          <path d="M550.603 108.122V145.728M550.603 161.338V198.944M550.521 145.503L557.034 153.308M557.043 153.036L550.531 161.551M550.774 198.643L598.532 169.551M550.774 108.423L598.532 137.515M598.361 137.213V169.853" stroke="black" />
           <text fill="black" xmlSpace="preserve" style={{ whiteSpace: "pre" }} fontSize="10" fontWeight="500" letterSpacing="0em"><tspan x="557.941" y="140.824">ADD</tspan></text>
           <text fill="black" xmlSpace="preserve" style={{ whiteSpace: "pre" }} fontSize="10" fontWeight="500" letterSpacing="0em"><tspan x="574.585" y="153.799">Sum</tspan></text>
         </g>
@@ -441,8 +441,8 @@ export default function PipelineDatapathSVG({
 
         {/* ADD 1 BOX */}
         <g id="Add 1" onMouseEnter={() => hover("ADD (PC + 4)")} onMouseLeave={unhover}>
-          <rect x={154} y={79} width={57} height={112.5} stroke="transparent"/>
-          <path id="Add 1_2" d="M157.966 79.2896V115.702M157.966 130.816V167.229M157.903 115.484L162.968 123.042M162.975 122.778L157.91 131.023M158.099 166.937L195.244 138.769M158.099 79.5813L195.244 107.749M195.111 107.458V139.061" stroke="black"/>
+          <rect x={154} y={79} width={57} height={112.5} stroke="transparent" />
+          <path id="Add 1_2" d="M157.966 79.2896V115.702M157.966 130.816V167.229M157.903 115.484L162.968 123.042M162.975 122.778L157.91 131.023M158.099 166.937L195.244 138.769M158.099 79.5813L195.244 107.749M195.111 107.458V139.061" stroke="black" />
           <text id="Add_2" fill="black" xmlSpace="preserve" style={{ whiteSpace: "pre" }} fontSize="10" fontWeight="500" letterSpacing="0em"><tspan x="166.857" y="122.083">Add</tspan></text>
           <text id="4" fill="black" xmlSpace="preserve" style={{ whiteSpace: "pre" }} fontSize="10" fontWeight="500" letterSpacing="0em"><tspan x="123.158" y="153.799">4</tspan></text>
         </g>
@@ -459,45 +459,45 @@ export default function PipelineDatapathSVG({
 
         {/* STAGE SEPARATORS */}
         <g onMouseEnter={() => hover("IF/ID")} onMouseLeave={unhover}>
-          <rect id="IF/ID Wall" x="259.758" y="55.2817" width="23.5387" height="484.828" fill={activeStages?.has("IF") ? "#2563eb" : "#D9D9D9"} stroke="black"/>
+          <rect id="IF/ID Wall" x="259.758" y="55.2817" width="23.5387" height="484.828" fill={activeStages?.has("IF") ? "#2563eb" : "#D9D9D9"} stroke="black" />
           <text fill="black" xmlSpace="preserve" style={{ whiteSpace: "pre" }} fontSize="10" fontWeight="500" letterSpacing="0em"><tspan x="261.658" y="42.7938">IF/ID</tspan></text>
         </g>
         <g onMouseEnter={() => hover("ID/EX")} onMouseLeave={unhover}>
-          <rect id="ID/EX Wall" x="465.67" y="55.2817" width="23.5387" height="484.828" fill={activeStages?.has("ID") ? "#2563eb" : "#D9D9D9"} stroke="black"/>
+          <rect id="ID/EX Wall" x="465.67" y="55.2817" width="23.5387" height="484.828" fill={activeStages?.has("ID") ? "#2563eb" : "#D9D9D9"} stroke="black" />
           <text fill="black" xmlSpace="preserve" style={{ whiteSpace: "pre" }} fontSize="10" fontWeight="500" letterSpacing="0em"><tspan x="463.839" y="42.7938">ID/EX</tspan></text>
         </g>
         <g onMouseEnter={() => hover("EX/MEM")} onMouseLeave={unhover}>
-          <rect id="EX/MEM Wall" x="653.444" y="55.2817" width="23.5387" height="484.828" fill={activeStages?.has("EX") ? "#2563eb" : "#D9D9D9"} stroke="black"/>
+          <rect id="EX/MEM Wall" x="653.444" y="55.2817" width="23.5387" height="484.828" fill={activeStages?.has("EX") ? "#2563eb" : "#D9D9D9"} stroke="black" />
           <text fill="black" xmlSpace="preserve" style={{ whiteSpace: "pre" }} fontSize="10" fontWeight="500" letterSpacing="0em"><tspan x="647.819" y="42.7938">EX/MEM</tspan></text>
         </g>
         <g onMouseEnter={() => hover("MEM/WB")} onMouseLeave={unhover}>
-          <rect id="MEM/WB Wall" x="828.415" y="55.2817" width="23.5387" height="484.828" fill={activeStages?.has("MEM") ? "#2563eb" : "#D9D9D9"} stroke="black"/>
+          <rect id="MEM/WB Wall" x="828.415" y="55.2817" width="23.5387" height="484.828" fill={activeStages?.has("MEM") ? "#2563eb" : "#D9D9D9"} stroke="black" />
           <text fill="black" xmlSpace="preserve" style={{ whiteSpace: "pre" }} fontSize="10" fontWeight="500" letterSpacing="0em"><tspan x="819.129" y="42.7938">MEM/WB</tspan></text>
         </g>
 
         {/* PIPELINE STAGE LABEL BOXES */}
         {!hideStageLabels && (
           <>
-          <g>
-            <rect x="60" y="10" width="140" height="20" fill="#f3f4f6" rx="6" />
-            <text fill={stageColors?.IF ?? "#374151"} xmlSpace="preserve" style={{ whiteSpace: "pre", fontFamily: "monospace", fontWeight: 600, fontSize: 13, letterSpacing: "0em" }} x="70" y="25">{stageLabels?.IF ?? ""}</text>
-          </g>
-          <g>
-            <rect x="300" y="10" width="140" height="20" fill="#f3f4f6" rx="6" />
-            <text fill={stageColors?.ID ?? "#374151"} xmlSpace="preserve" style={{ whiteSpace: "pre", fontFamily: "monospace", fontWeight: 600, fontSize: 13, letterSpacing: "0em" }} x="310" y="25">{stageLabels?.ID ?? ""}</text>
-          </g>
-          <g>
-            <rect x="505" y="10" width="140" height="20" fill="#f3f4f6" rx="6" />
-            <text fill={stageColors?.EX ?? "#374151"} xmlSpace="preserve" style={{ whiteSpace: "pre", fontFamily: "monospace", fontWeight: 600, fontSize: 13, letterSpacing: "0em" }} x="515" y="25">{stageLabels?.EX ?? ""}</text>
-          </g>
-          <g>
-            <rect x="690" y="10" width="140" height="20" fill="#f3f4f6" rx="6" />
-            <text fill={stageColors?.MEM ?? "#374151"} xmlSpace="preserve" style={{ whiteSpace: "pre", fontFamily: "monospace", fontWeight: 600, fontSize: 13, letterSpacing: "0em" }} x="700" y="25">{stageLabels?.MEM ?? ""}</text>
-          </g>
-          <g>
-            <rect x="855" y="10" width="140" height="20" fill="#f2f4f6" rx="6" />
-            <text fill={stageColors?.WB ?? "#374151"} xmlSpace="preserve" style={{ whiteSpace: "pre", fontFamily: "monospace", fontWeight: 600, fontSize: 13, letterSpacing: "0em" }} x="865" y="25">{stageLabels?.WB ?? ""}</text>
-          </g>
+            <g>
+              <rect x="60" y="10" width="140" height="20" fill="#f3f4f6" rx="6" />
+              <text fill={stageColors?.IF ?? "#374151"} xmlSpace="preserve" style={{ whiteSpace: "pre", fontFamily: "monospace", fontWeight: 600, fontSize: 13, letterSpacing: "0em" }} x="70" y="25">{stageLabels?.IF ?? ""}</text>
+            </g>
+            <g>
+              <rect x="300" y="10" width="140" height="20" fill="#f3f4f6" rx="6" />
+              <text fill={stageColors?.ID ?? "#374151"} xmlSpace="preserve" style={{ whiteSpace: "pre", fontFamily: "monospace", fontWeight: 600, fontSize: 13, letterSpacing: "0em" }} x="310" y="25">{stageLabels?.ID ?? ""}</text>
+            </g>
+            <g>
+              <rect x="505" y="10" width="140" height="20" fill="#f3f4f6" rx="6" />
+              <text fill={stageColors?.EX ?? "#374151"} xmlSpace="preserve" style={{ whiteSpace: "pre", fontFamily: "monospace", fontWeight: 600, fontSize: 13, letterSpacing: "0em" }} x="515" y="25">{stageLabels?.EX ?? ""}</text>
+            </g>
+            <g>
+              <rect x="690" y="10" width="140" height="20" fill="#f3f4f6" rx="6" />
+              <text fill={stageColors?.MEM ?? "#374151"} xmlSpace="preserve" style={{ whiteSpace: "pre", fontFamily: "monospace", fontWeight: 600, fontSize: 13, letterSpacing: "0em" }} x="700" y="25">{stageLabels?.MEM ?? ""}</text>
+            </g>
+            <g>
+              <rect x="855" y="10" width="140" height="20" fill="#f2f4f6" rx="6" />
+              <text fill={stageColors?.WB ?? "#374151"} xmlSpace="preserve" style={{ whiteSpace: "pre", fontFamily: "monospace", fontWeight: 600, fontSize: 13, letterSpacing: "0em" }} x="865" y="25">{stageLabels?.WB ?? ""}</text>
+            </g>
           </>
         )}
 
