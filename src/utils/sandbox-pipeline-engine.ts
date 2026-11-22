@@ -39,6 +39,17 @@ export interface RetireResult {
 
 export class PipelineBlockedError extends Error {}
 
+export interface PipelineStats {
+  cycles: number;
+  retired: number;
+  dataHazards: number;
+  stallCycles: number;
+  controlHazards: number;
+  flushedInstructions: number;
+}
+
+const HISTORY_LIMIT = 256;
+
 export interface PipelineEnv {
   fetch(address: number): Promise<FetchResult | null>;
   readRegisters(): Promise<readonly number[]>;
@@ -151,9 +162,19 @@ export class PipelineEngine {
   private cycle = 0;
   private fetchBlocked = false;
   private halted = false;
+  private counts = { retired: 0, dataHazards: 0, stallCycles: 0, controlHazards: 0, flushedInstructions: 0 };
+  private lastStalled: PipelineSlot | null = null;
 
   constructor(startPc: number) {
     this.pc = startPc >>> 0;
+  }
+
+  get stats(): PipelineStats {
+    return { ...this.counts, cycles: this.cycle };
+  }
+
+  get cycles() {
+    return this.cycle;
   }
 
   get finished() {
@@ -169,8 +190,12 @@ export class PipelineEngine {
     const notes: string[] = [];
     const next: Record<PipelineStageName, Latch> = { IF: null, ID: null, EX: null, MEM: prev.EX, WB: prev.MEM };
     let fetchNeeded = false;
+    let retiredNow = 0;
+    let squashed = 0;
+    let redirectsNow = 0;
+    const dependency = findDependency(prev);
 
-    if (findDependency(prev)) {
+    if (dependency) {
       next.EX = STALL;
       next.ID = prev.ID;
       next.IF = prev.IF;
@@ -181,8 +206,9 @@ export class PipelineEngine {
     }
 
     let flushed = false;
-    const flushYounger = () => {
+    const flushYounger = (countSquashed = true) => {
       flushed = true;
+      if (countSquashed) squashed += [next.IF, next.ID, next.EX].filter(isInst).length;
       next.IF = FLUSH;
       next.ID = FLUSH;
       next.EX = FLUSH;
@@ -193,9 +219,11 @@ export class PipelineEngine {
       const retired = next.WB;
       const result = await env.retire(retired);
       if (result.blocked) throw new PipelineBlockedError(result.message ?? 'The emulator is waiting for input.');
+      retiredNow = 1;
       const expectedNext = retired.taken ? retired.target : retired.address + 4;
       if (result.address !== retired.address || result.raw !== retired.raw) {
         flushYounger();
+        if (isInst(next.MEM)) squashed += 1;
         next.MEM = FLUSH;
         this.pc = result.nextPc >>> 0;
         this.fetchBlocked = false;
@@ -205,11 +233,12 @@ export class PipelineEngine {
         );
       } else if (result.halted) {
         this.halted = true;
-        flushYounger();
+        flushYounger(false);
         next.MEM = FLUSH;
         if (result.message) notes.push(result.message);
       } else if (!result.halted && result.nextPc >>> 0 !== (expectedNext ?? 0) >>> 0) {
         flushYounger();
+        if (isInst(next.MEM)) squashed += 1;
         next.MEM = FLUSH;
         this.pc = result.nextPc >>> 0;
         this.fetchBlocked = false;
@@ -235,6 +264,7 @@ export class PipelineEngine {
     }
 
     if (isInst(next.MEM) && isRedirect(next.MEM) && next.MEM.taken && next.MEM.target !== undefined && !flushed) {
+      redirectsNow = 1;
       flushYounger();
       this.pc = next.MEM.target >>> 0;
       this.fetchBlocked = false;
@@ -262,6 +292,14 @@ export class PipelineEngine {
 
     this.latches = next;
     this.cycle += 1;
+    this.counts.retired += retiredNow;
+    this.counts.controlHazards += redirectsNow;
+    this.counts.flushedInstructions += squashed;
+    if (dependency) {
+      this.counts.stallCycles += 1;
+      if (this.lastStalled !== dependency.consumer) this.counts.dataHazards += 1;
+      this.lastStalled = dependency.consumer;
+    }
     return this.record(notes);
   }
 
@@ -291,6 +329,7 @@ export class PipelineEngine {
   private record(notes: string[]): PipelineState {
     const state = this.buildState(notes);
     this.history.push(state);
+    if (this.history.length > HISTORY_LIMIT) this.history.splice(0, this.history.length - HISTORY_LIMIT);
     return state;
   }
 

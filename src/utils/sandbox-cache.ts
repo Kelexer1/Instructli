@@ -94,11 +94,22 @@ export interface CacheSlot {
   stamp: number;
 }
 
+export type MissKind = 'compulsory' | 'conflict' | 'capacity';
+
+export const MISS_KIND_LABELS: Record<MissKind, string> = {
+  compulsory: 'Compulsory',
+  conflict: 'Conflict',
+  capacity: 'Capacity',
+};
+
 export interface CacheStats {
   accesses: number;
   hits: number;
   misses: number;
   evictions: number;
+  compulsory: number;
+  conflict: number;
+  capacity: number;
 }
 
 export interface AccessResult {
@@ -106,6 +117,7 @@ export interface AccessResult {
   hit: boolean;
   way: number;
   evictedTag: number | null;
+  missKind: MissKind | null;
 }
 
 export interface LastAccess {
@@ -130,6 +142,10 @@ function mulberry32(seed: number) {
   };
 }
 
+function emptyStats(): CacheStats {
+  return { accesses: 0, hits: 0, misses: 0, evictions: 0, compulsory: 0, conflict: 0, capacity: 0 };
+}
+
 function emptySets(config: CacheConfig): CacheSlot[][] {
   return Array.from({ length: cacheSets(config) }, () =>
     Array.from({ length: config.numWays }, () => ({ valid: false, tag: 0, stamp: 0 })),
@@ -144,8 +160,10 @@ export class CacheSimulator {
   readonly config: CacheConfig;
   lastAccess: LastAccess | null = null;
   private sets: CacheSlot[][];
-  private counts: CacheStats = { accesses: 0, hits: 0, misses: 0, evictions: 0 };
+  private counts: CacheStats = emptyStats();
   private random = mulberry32(RANDOM_SEED);
+  private seenBlocks = new Set<number>();
+  private filledBlocks = 0;
 
   constructor(config: CacheConfig) {
     this.config = normalizeCacheConfig(config);
@@ -158,8 +176,10 @@ export class CacheSimulator {
 
   reset() {
     this.sets = emptySets(this.config);
-    this.counts = { accesses: 0, hits: 0, misses: 0, evictions: 0 };
+    this.counts = emptyStats();
     this.random = mulberry32(RANDOM_SEED);
+    this.seenBlocks = new Set();
+    this.filledBlocks = 0;
     this.lastAccess = null;
   }
 
@@ -174,21 +194,29 @@ export class CacheSimulator {
     if (hitWay !== -1) {
       this.counts.hits += 1;
       if (policy === 'lru') set[hitWay].stamp = nextStamp(set);
-      result = { breakdown, hit: true, way: hitWay, evictedTag: null };
+      result = { breakdown, hit: true, way: hitWay, evictedTag: null, missKind: null };
     } else {
       this.counts.misses += 1;
+      const missKind: MissKind = !this.seenBlocks.has(breakdown.blockNumber)
+        ? 'compulsory'
+        : this.filledBlocks === this.config.numBlocks
+          ? 'capacity'
+          : 'conflict';
+      this.counts[missKind] += 1;
       const emptyWay = set.findIndex((slot) => !slot.valid);
       const way = emptyWay !== -1 ? emptyWay : this.pickVictim(set);
       const evictedTag = set[way].valid ? set[way].tag : null;
       if (evictedTag !== null) this.counts.evictions += 1;
+      else this.filledBlocks += 1;
       set[way] = {
         valid: true,
         tag: breakdown.tag,
         stamp: policy === 'random' ? 0 : nextStamp(set),
       };
-      result = { breakdown, hit: false, way, evictedTag };
+      result = { breakdown, hit: false, way, evictedTag, missKind };
     }
 
+    this.seenBlocks.add(breakdown.blockNumber);
     this.lastAccess = { pc, result };
     return result;
   }
@@ -209,6 +237,21 @@ export class CacheSimulator {
 
 function hex(value: number): string {
   return `0x${(value >>> 0).toString(16).padStart(8, '0')}`;
+}
+
+export function describeMissKind(result: AccessResult, config: CacheConfig): string {
+  const { blockNumber, index } = result.breakdown;
+  const where = config.type === 'direct-mapped' ? `index ${index}` : `set ${index}`;
+  switch (result.missKind) {
+    case 'compulsory':
+      return `Compulsory miss: block ${blockNumber} has never been accessed before, so no cache could have held it.`;
+    case 'capacity':
+      return `Capacity miss: block ${blockNumber} was cached earlier but evicted, and every block in the cache is in use - the cache is too small for the working set.`;
+    case 'conflict':
+      return `Conflict miss: block ${blockNumber} was cached earlier but evicted because ${where} is full, even though other blocks in the cache are still empty.`;
+    default:
+      return '';
+  }
 }
 
 export function describeAccess(result: AccessResult, config: CacheConfig): string {

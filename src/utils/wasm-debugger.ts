@@ -13,12 +13,17 @@ let wasmModule: WasmModule | undefined;
 let activeSession = 0;
 let outputBuffer: WasmOutput[] = [];
 let loadListener: WasmLoadListener | null = null;
+let retireListener: WasmRetireListener | null = null;
 const breakpointAddresses = new Set<number>();
 const TRACE_YIELD_INTERVAL_MS = 30;
 const TRACE_YIELD_MASK = 0x3ff;
 
 export function setWasmLoadListener(listener: WasmLoadListener | null) {
   loadListener = listener;
+}
+
+export function setWasmRetireListener(listener: WasmRetireListener | null) {
+  retireListener = listener;
 }
 
 export interface WasmOutput {
@@ -50,6 +55,13 @@ export interface WasmLoadAccess {
 }
 
 export type WasmLoadListener = (access: WasmLoadAccess) => void;
+
+export interface WasmRetireEvent {
+  pc: number;
+  redirected: boolean;
+}
+
+export type WasmRetireListener = (event: WasmRetireEvent) => void;
 
 export const WASM_STEP_DONE = 5;
 export const WASM_STOP_BREAKPOINT = 0;
@@ -164,6 +176,15 @@ function loadAccessBeforeStep(
   return readable ? { pc, address, size } : null;
 }
 
+function reportRetire(wasm: WasmModule, session: number, pc: number, status: number) {
+  const listener = retireListener;
+  if (!listener) return;
+  if (status !== WASM_STEP_DONE && status !== WASM_STOP_EXITED && status !== WASM_STOP_EBREAK) return;
+  const redirected = status === WASM_STEP_DONE
+    && (wasm.ccall('wasm_pc', 'number', ['number'], [session]) >>> 0) !== ((pc + 4) >>> 0);
+  listener({ pc, redirected });
+}
+
 function readTextRange(wasm: WasmModule, session: number) {
   const textStart = wasm.ccall('wasm_text_base', 'number', ['number'], [session]) >>> 0;
   const textSize = wasm.ccall('wasm_text_size', 'number', ['number'], [session]) >>> 0;
@@ -175,7 +196,7 @@ export async function runWasm(): Promise<number> {
   if (!activeSession) throw new Error('Load the program before running it.');
   const session = activeSession;
   const listener = loadListener;
-  if (!listener) return wasm.ccall('wasm_continue', 'number', ['number'], [session]);
+  if (!listener && !retireListener) return wasm.ccall('wasm_continue', 'number', ['number'], [session]);
 
   const { textStart, textEnd } = readTextRange(wasm, session);
   let lastYield = performance.now();
@@ -187,10 +208,11 @@ export async function runWasm(): Promise<number> {
     if (!first && breakpointAddresses.has(pc)) return WASM_STOP_BREAKPOINT;
     first = false;
 
-    const access = loadAccessBeforeStep(wasm, session, pc, textStart, textEnd);
+    const access = listener ? loadAccessBeforeStep(wasm, session, pc, textStart, textEnd) : null;
     const status = wasm.ccall('wasm_step', 'number', ['number'], [session]);
+    reportRetire(wasm, session, pc, status);
     if (status !== WASM_STEP_DONE) return status;
-    if (access) listener(access);
+    if (access && listener) listener(access);
 
     executed += 1;
     if ((executed & TRACE_YIELD_MASK) === 0 && performance.now() - lastYield > TRACE_YIELD_INTERVAL_MS) {
@@ -205,13 +227,14 @@ export async function stepWasm(): Promise<number> {
   if (!activeSession) throw new Error('Load the program before stepping it.');
   const session = activeSession;
   const listener = loadListener;
-  if (!listener) return wasm.ccall('wasm_step', 'number', ['number'], [session]);
+  if (!listener && !retireListener) return wasm.ccall('wasm_step', 'number', ['number'], [session]);
 
   const { textStart, textEnd } = readTextRange(wasm, session);
   const pc = wasm.ccall('wasm_pc', 'number', ['number'], [session]) >>> 0;
-  const access = loadAccessBeforeStep(wasm, session, pc, textStart, textEnd);
+  const access = listener ? loadAccessBeforeStep(wasm, session, pc, textStart, textEnd) : null;
   const status = wasm.ccall('wasm_step', 'number', ['number'], [session]);
-  if (status === WASM_STEP_DONE && access) listener(access);
+  reportRetire(wasm, session, pc, status);
+  if (status === WASM_STEP_DONE && access && listener) listener(access);
   return status;
 }
 

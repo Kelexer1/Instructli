@@ -9,6 +9,8 @@ import {
   blockBaseFor,
   cacheSets,
   describeAccess,
+  describeMissKind,
+  MISS_KIND_LABELS,
   normalizeCacheConfig,
   usesReplacement,
   wayOptions,
@@ -51,32 +53,38 @@ function ConfigField({ label, children }: { label: string; children: ReactNode }
   );
 }
 
-function BreakdownBoxes({ breakdown, config }: { breakdown: AddressBreakdown; config: CacheConfig }) {
+function AddressBits({ breakdown, config }: { breakdown: AddressBreakdown; config: CacheConfig }) {
   const hasIndex = config.type !== 'fully-associative' && breakdown.indexBits > 0;
   const fields = [
-    { label: 'Tag', bits: breakdown.tagBits, value: breakdown.tag, style: 'border-indigo-300 bg-indigo-50 text-indigo-800' },
+    { label: 'Tag', bits: breakdown.tagBits, value: breakdown.tag, text: 'text-indigo-800', highlight: 'bg-indigo-100' },
     ...(hasIndex
-      ? [{ label: 'Index', bits: breakdown.indexBits, value: breakdown.index, style: 'border-amber-300 bg-amber-50 text-amber-800' }]
+      ? [{ label: 'Index', bits: breakdown.indexBits, value: breakdown.index, text: 'text-amber-800', highlight: 'bg-amber-100' }]
       : []),
     ...(breakdown.blockOffsetBits > 0
-      ? [{ label: 'Block offset', bits: breakdown.blockOffsetBits, value: breakdown.blockOffset, style: 'border-teal-300 bg-teal-50 text-teal-800' }]
+      ? [{ label: 'Block offset', bits: breakdown.blockOffsetBits, value: breakdown.blockOffset, text: 'text-teal-800', highlight: 'bg-teal-100' }]
       : []),
-    { label: 'Byte offset', bits: breakdown.byteOffsetBits, value: breakdown.byteOffset, style: 'border-slate-300 bg-slate-50 text-slate-700' },
-  ];
+    { label: 'Byte offset', bits: breakdown.byteOffsetBits, value: breakdown.byteOffset, text: 'text-slate-700', highlight: 'bg-slate-200' },
+  ].filter((field) => field.bits > 0);
+
+  const addressBits = binary(breakdown.address, 32);
+  let cursor = 0;
 
   return (
-    <div className="flex flex-wrap items-stretch gap-1.5">
-      {fields.map((field) => (
-        <div key={field.label} className={`min-w-0 rounded border px-2 py-1 text-center flex flex-col items-center ${field.style}`}>
-          <p className="text-[10px] font-semibold uppercase tracking-wide">
-            {field.label} · {field.bits} {field.bits === 1 ? 'bit' : 'bits'}
-          </p>
-          <div className="flex flex-row gap-x-1">
-            <p className="break-all font-mono text-xs">{binary(field.value, field.bits)}</p>
-            <p className="text-[10px] opacity-70">= {field.value}</p>
+    <div className="flex flex-wrap items-end justify-center gap-x-3 gap-y-2">
+      {fields.map((field) => {
+        const slice = addressBits.slice(cursor, cursor + field.bits);
+        cursor += field.bits;
+        return (
+          <div key={field.label} className="flex flex-col items-center gap-0.5">
+            <p className={`whitespace-nowrap text-[10px] font-semibold uppercase tracking-wide ${field.text}`}>
+              {field.label} · {field.value}
+            </p>
+            <p className={`rounded px-1.5 py-0.5 font-mono text-lg font-semibold tracking-wider ${field.text} ${field.highlight}`}>
+              {slice}
+            </p>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -92,7 +100,7 @@ function LastAccessCard({
 }) {
   if (!lastInstruction) {
     return (
-      <p className="rounded-lg border border-dashed border-slate-200 px-3 py-3 text-center text-xs text-gray-400 h-[10rem]">
+      <p className="rounded-lg border border-dashed border-slate-200 px-3 py-3 text-center text-xs text-gray-400 h-[13rem]">
         Step or run the program to see how its memory reads use the cache.
       </p>
     );
@@ -101,7 +109,7 @@ function LastAccessCard({
   const tone = lastRead ? (lastRead.hit ? HIT : MISS) : null;
 
   return (
-    <div className="rounded-lg border border-slate-200 p-3 h-[10rem]">
+    <div className="h-[13rem] overflow-y-auto rounded-lg border border-slate-200 p-3">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Last executed instruction</p>
@@ -114,7 +122,7 @@ function LastAccessCard({
             className="shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold"
             style={{ backgroundColor: tone.bg, color: tone.fg }}
           >
-            {lastRead.hit ? 'Hit' : 'Miss'}
+            {lastRead.hit || !lastRead.missKind ? 'Hit' : `${MISS_KIND_LABELS[lastRead.missKind]} miss`}
           </span>
         ) : (
           <span className="shrink-0 text-[11px] text-gray-400">No memory read</span>
@@ -123,12 +131,12 @@ function LastAccessCard({
 
       {lastRead && (
         <div className="mt-3 space-y-2">
-          <p className="font-mono text-xs text-gray-600">
-            Address {hex(lastRead.breakdown.address)}
-            <span className="text-gray-400"> · {binary(lastRead.breakdown.address, 32)}</span>
+          <p className="font-mono text-xs text-gray-600">Address {hex(lastRead.breakdown.address)}</p>
+          <AddressBits breakdown={lastRead.breakdown} config={config} />
+          <p className="text-xs leading-relaxed text-gray-600">
+            {lastRead.missKind && <span className="font-semibold">{describeMissKind(lastRead, config)} </span>}
+            {describeAccess(lastRead, config)}
           </p>
-          <BreakdownBoxes breakdown={lastRead.breakdown} config={config} />
-          <p className="text-xs leading-relaxed text-gray-600">{describeAccess(lastRead, config)}</p>
         </div>
       )}
     </div>
@@ -285,6 +293,9 @@ export default function CachePane({ snapshot, lastRead, lastInstruction, disable
         <Stat label="Hit rate" value={hitRate} />
         <Stat label="Evictions" value={String(stats.evictions)} />
         <Stat label="Blocks filled" value={`${filled} / ${config.numBlocks}`} />
+        <Stat label="Compulsory" value={String(stats.compulsory)} />
+        <Stat label="Conflict" value={String(stats.conflict)} />
+        <Stat label="Capacity" value={String(stats.capacity)} />
       </div>
     </div>
   );
