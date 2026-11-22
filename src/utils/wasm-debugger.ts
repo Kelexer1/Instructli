@@ -12,6 +12,14 @@ let modulePromise: Promise<WasmModule> | undefined;
 let wasmModule: WasmModule | undefined;
 let activeSession = 0;
 let outputBuffer: WasmOutput[] = [];
+let loadListener: WasmLoadListener | null = null;
+const breakpointAddresses = new Set<number>();
+const TRACE_YIELD_INTERVAL_MS = 30;
+const TRACE_YIELD_MASK = 0x3ff;
+
+export function setWasmLoadListener(listener: WasmLoadListener | null) {
+  loadListener = listener;
+}
 
 export interface WasmOutput {
   stream: 'stdin' | 'stdout' | 'stderr';
@@ -35,6 +43,15 @@ export interface WasmRegister {
   value: number;
 }
 
+export interface WasmLoadAccess {
+  pc: number;
+  address: number;
+  size: number;
+}
+
+export type WasmLoadListener = (access: WasmLoadAccess) => void;
+
+export const WASM_STEP_DONE = 5;
 export const WASM_STOP_BREAKPOINT = 0;
 export const WASM_STOP_EBREAK = 2;
 export const WASM_STOP_EXITED = 3;
@@ -103,6 +120,7 @@ function closeActiveSession(wasm: WasmModule) {
   if (!activeSession) return;
   wasm.ccall('wasm_session_close', null, ['number'], [activeSession]);
   activeSession = 0;
+  breakpointAddresses.clear();
 }
 
 export async function assembleWasm(source: string): Promise<void> {
@@ -121,16 +139,80 @@ export async function loadWasm(): Promise<void> {
   if (!loaded) throw new Error('The assembled program could not be loaded into the emulator.');
 }
 
+function loadAccessBeforeStep(
+  wasm: WasmModule,
+  session: number,
+  pc: number,
+  textStart: number,
+  textEnd: number,
+): WasmLoadAccess | null {
+  if ((pc < textStart || pc >= textEnd)
+    && !wasm.ccall('wasm_memory_readable', 'number', ['number', 'number', 'number'], [session, pc, 4])) {
+    return null;
+  }
+
+  const raw = wasm.ccall('wasm_read_u32_value', 'number', ['number', 'number'], [session, pc]) >>> 0;
+  if ((raw & 0x7f) !== 0x03) return null;
+
+  const funct3 = (raw >>> 12) & 0x7;
+  const size = funct3 === 0 || funct3 === 4 ? 1 : funct3 === 1 || funct3 === 5 ? 2 : funct3 === 2 ? 4 : 0;
+  if (size === 0) return null;
+
+  const base = wasm.ccall('wasm_reg', 'number', ['number', 'number'], [session, (raw >>> 15) & 0x1f]) >>> 0;
+  const address = (base + (raw >> 20)) >>> 0;
+  const readable = wasm.ccall('wasm_memory_readable', 'number', ['number', 'number', 'number'], [session, address, size]);
+  return readable ? { pc, address, size } : null;
+}
+
+function readTextRange(wasm: WasmModule, session: number) {
+  const textStart = wasm.ccall('wasm_text_base', 'number', ['number'], [session]) >>> 0;
+  const textSize = wasm.ccall('wasm_text_size', 'number', ['number'], [session]) >>> 0;
+  return { textStart, textEnd: textStart + textSize };
+}
+
 export async function runWasm(): Promise<number> {
   const wasm = await loadModule();
   if (!activeSession) throw new Error('Load the program before running it.');
-  return wasm.ccall('wasm_continue', 'number', ['number'], [activeSession]);
+  const session = activeSession;
+  const listener = loadListener;
+  if (!listener) return wasm.ccall('wasm_continue', 'number', ['number'], [session]);
+
+  const { textStart, textEnd } = readTextRange(wasm, session);
+  let lastYield = performance.now();
+  let executed = 0;
+  let first = true;
+
+  for (;;) {
+    const pc = wasm.ccall('wasm_pc', 'number', ['number'], [session]) >>> 0;
+    if (!first && breakpointAddresses.has(pc)) return WASM_STOP_BREAKPOINT;
+    first = false;
+
+    const access = loadAccessBeforeStep(wasm, session, pc, textStart, textEnd);
+    const status = wasm.ccall('wasm_step', 'number', ['number'], [session]);
+    if (status !== WASM_STEP_DONE) return status;
+    if (access) listener(access);
+
+    executed += 1;
+    if ((executed & TRACE_YIELD_MASK) === 0 && performance.now() - lastYield > TRACE_YIELD_INTERVAL_MS) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      lastYield = performance.now();
+    }
+  }
 }
 
 export async function stepWasm(): Promise<number> {
   const wasm = await loadModule();
   if (!activeSession) throw new Error('Load the program before stepping it.');
-  return wasm.ccall('wasm_step', 'number', ['number'], [activeSession]);
+  const session = activeSession;
+  const listener = loadListener;
+  if (!listener) return wasm.ccall('wasm_step', 'number', ['number'], [session]);
+
+  const { textStart, textEnd } = readTextRange(wasm, session);
+  const pc = wasm.ccall('wasm_pc', 'number', ['number'], [session]) >>> 0;
+  const access = loadAccessBeforeStep(wasm, session, pc, textStart, textEnd);
+  const status = wasm.ccall('wasm_step', 'number', ['number'], [session]);
+  if (status === WASM_STEP_DONE && access) listener(access);
+  return status;
 }
 
 export async function readWasmDebugState(source = ''): Promise<WasmDebugState> {
@@ -307,10 +389,12 @@ export async function addWasmBreakpoint(address: number): Promise<void> {
   if (!activeSession) throw new Error('Assemble the program before setting breakpoints.');
   const added = wasm.ccall('wasm_bp_add', 'number', ['number', 'number'], [activeSession, address]);
   if (!added) throw new Error(`The emulator could not set a breakpoint at 0x${address.toString(16)}.`);
+  breakpointAddresses.add(address >>> 0);
 }
 
 export async function removeWasmBreakpoint(address: number): Promise<void> {
   const wasm = await loadModule();
   if (!activeSession) throw new Error('Assemble the program before removing breakpoints.');
   wasm.ccall('wasm_bp_remove', null, ['number', 'number'], [activeSession, address]);
+  breakpointAddresses.delete(address >>> 0);
 }

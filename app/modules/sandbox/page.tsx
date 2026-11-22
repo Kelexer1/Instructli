@@ -9,12 +9,14 @@ import DisassemblyPane from '@/components/sandbox/DisassemblyPane';
 import RegisterPane from '@/components/sandbox/RegisterPane';
 import TerminalPane from '@/components/sandbox/TerminalPane';
 import MemoryPane from '@/components/sandbox/MemoryPane';
+import CachePane from '@/components/sandbox/CachePane';
 import SingleProcessor from '@/components/sandbox/SandboxSingleCycle';
 import PipelineProcessor from '@/components/sandbox/SandboxPipelineProcessor';
 import { createSandboxSingleCycleSnapshot, type SandboxSingleCycleSnapshot } from '@/src/utils/sandbox-single-cycle';
 import { PipelineBlockedError, PipelineEngine, type PipelineEnv, type PipelineSlot } from '@/src/utils/sandbox-pipeline-engine';
 import type { PipelineState } from '@/src/utils/pipeline-types';
 import { createSandboxCpuData } from '@/src/utils/sandbox-cpu-data';
+import { CacheSimulator, DEFAULT_CACHE_CONFIG, type AccessResult, type CacheConfig, type CacheSnapshot } from '@/src/utils/sandbox-cache';
 import type { SandboxCpuData } from '@/src/utils/sandbox-cpu-data';
 import { WindowTabs } from '@/components/WindowTabs';
 import {
@@ -36,6 +38,7 @@ import {
   readWasmMemory,
   writeWasmMemory,
   provideWasmInput,
+  setWasmLoadListener,
   resumeWasm,
   resetWasmInput,
   runWasm,
@@ -71,6 +74,10 @@ export default function SandboxModule() {
   const pipelineSteppingRef = useRef(false);
   const pipelineCycle = pipelineResults.length - 1;
   const [activeToolTab, setActiveToolTab] = useState('terminal');
+  const [initialCacheSim] = useState(() => new CacheSimulator(DEFAULT_CACHE_CONFIG));
+  const cacheSimRef = useRef(initialCacheSim);
+  const [cacheSnapshot, setCacheSnapshot] = useState<CacheSnapshot>(() => initialCacheSim.snapshot());
+  const [cacheLastRead, setCacheLastRead] = useState<AccessResult | null>(null);
   const [cpuMode, setCpuMode] = useState<'single-cycle' | 'pipeline'>('single-cycle');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cpuData: SandboxCpuData = useMemo(
@@ -85,13 +92,32 @@ export default function SandboxModule() {
     ),
     [justExecutedAddress, nextAddress, registers],
   );
+  const lastInstruction = useMemo(() => {
+    if (justExecutedAddress === null) return null;
+    const instruction = instructions.find((candidate) => candidate.address === justExecutedAddress);
+    return instruction ? { address: instruction.address, text: instruction.text } : null;
+  }, [instructions, justExecutedAddress]);
+
   function resetPipeline() {
     pipelineEngineRef.current = null;
     setPipelineResults([]);
   }
 
+  function resetCache() {
+    cacheSimRef.current.reset();
+    setCacheSnapshot(cacheSimRef.current.snapshot());
+    setCacheLastRead(null);
+  }
+
   useEffect(() => {
     recordAnalyticsVisit('sandbox');
+  }, []);
+
+  useEffect(() => {
+    setWasmLoadListener((access) => {
+      cacheSimRef.current.access(access.address, access.pc);
+    });
+    return () => setWasmLoadListener(null);
   }, []);
 
   function updateSource(nextSource: string) {
@@ -104,6 +130,7 @@ export default function SandboxModule() {
     setChangedRegisters(new Set());
     setSingleCycleSnapshot(null);
     resetPipeline();
+    resetCache();
     setStatus(null);
   }
 
@@ -207,6 +234,18 @@ export default function SandboxModule() {
     }
   }
 
+  async function handleCacheConfigChange(config: CacheConfig) {
+    if (busy) return;
+
+    const nextSim = new CacheSimulator(config);
+    cacheSimRef.current = nextSim;
+    setCacheSnapshot(nextSim.snapshot());
+    setCacheLastRead(null);
+    if (loaded) {
+      await handleLoad();
+    }
+  }
+
   function flushTerminalOutput() {
     const output = drainWasmOutput();
     if (output.length > 0) setTerminalOutput((current) => [...current, ...output]);
@@ -228,6 +267,7 @@ export default function SandboxModule() {
       setNextAddress(debugState.currentAddress);
       setSingleCycleSnapshot(null);
       resetPipeline();
+      resetCache();
       setBreakpointAddresses(new Set());
       setAssemblyState('current');
       setLoaded(false);
@@ -257,6 +297,7 @@ export default function SandboxModule() {
       setNextAddress(debugState.currentAddress);
       setSingleCycleSnapshot(null);
       resetPipeline();
+      resetCache();
       setLoaded(true);
       setStatus('Program loaded. Ready to run.');
     } catch (error) {
@@ -310,6 +351,8 @@ export default function SandboxModule() {
   async function handleExecution(action: () => Promise<number>): Promise<{ stopReason: number; executedAddress: number; currentAddress: number } | null> {
     setBusy(true);
     setStatus(null);
+    const cacheSim = cacheSimRef.current;
+    const readsBefore = cacheSim.accessCount;
     try {
       const stepping = action === stepWasm;
       const startAddress = stepping ? await readWasmProgramCounter() : null;
@@ -318,6 +361,13 @@ export default function SandboxModule() {
       const stopReason = await action();
       flushTerminalOutput();
       const executedAddress = await readWasmLastExecutedAddress();
+      const lastAccess = cacheSim.lastAccess;
+      setCacheSnapshot(cacheSim.snapshot());
+      setCacheLastRead(
+        lastAccess !== null && cacheSim.accessCount > readsBefore && lastAccess.pc === executedAddress
+          ? lastAccess.result
+          : null,
+      );
       const currentAddress = await readWasmProgramCounter();
       const nextRegisters = await readWasmRegisters();
       const lastWrittenRegister = await readWasmLastWrittenRegister();
@@ -534,6 +584,19 @@ export default function SandboxModule() {
                       readValue={cpuData.readMemory}
                       writeValue={handleMemoryWrite}
                       onError={setStatus}
+                    />
+                  ),
+                },
+                {
+                  id: 'cache',
+                  label: 'Cache',
+                  content: (
+                    <CachePane
+                      snapshot={cacheSnapshot}
+                      lastRead={cacheLastRead}
+                      lastInstruction={lastInstruction}
+                      disabled={busy}
+                      onConfigChange={(config) => void handleCacheConfigChange(config)}
                     />
                   ),
                 },
